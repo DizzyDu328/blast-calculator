@@ -1,0 +1,2987 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>爆炸复合板成本预估系统 v6 · 旌德弘力</title>
+<style>
+:root {
+  --primary: #1a3a5c; --secondary: #2563a8; --accent: #c9320a;
+  --bg: #f0f4f8; --card: #fff; --text: #1a202c; --muted: #718096;
+  --border: #cbd5e0; --success: #276749; --warning: #b45309;
+  --steel-red: #b91c1c; --blast-orange: #ea580c;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+header { background: linear-gradient(135deg, var(--primary), var(--secondary)); color: white; padding: 16px 24px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 12px rgba(0,0,0,0.15); }
+header h1 { font-size: 1.2rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+header .subtitle { font-size: 0.72rem; opacity: 0.85; margin-top: 2px; }
+.container { max-width: 1000px; margin: 0 auto; padding: 14px; }
+.card { background: var(--card); border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 14px; overflow: hidden; }
+.card-header { background: var(--primary); color: white; padding: 10px 16px; font-weight: 600; font-size: 0.88rem; display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+.card-header.blue { background: #1d4ed8; }
+.card-header.orange { background: var(--blast-orange); }
+.card-header.green { background: var(--success); }
+.card-header.purple { background: #7c3aed; }
+.card-header.teal { background: #0d9488; }
+.card-header.gray { background: #475569; }
+.card-body { padding: 14px; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; }
+.field { flex: 1; min-width: 150px; margin-bottom: 9px; }
+.field label { display: block; font-size: 0.74rem; color: var(--muted); margin-bottom: 3px; font-weight: 500; }
+.field label span.hint { color: var(--accent); font-size: 0.68rem; float: right; }
+input, select, textarea { width: 100%; padding: 7px 11px; border: 1.8px solid var(--border); border-radius: 8px; font-size: 0.9rem; transition: border-color 0.2s; background: #fafcff; font-family: inherit; }
+textarea { resize: vertical; min-height: 80px; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--secondary); background: white; }
+input.auto, input[readonly] { background: #f0fff4; border-color: #9ae6b4; color: var(--success); font-weight: 600; cursor: default; }
+input[type="number"] { font-size: 0.97rem; }
+.section-title { font-size: 0.8rem; font-weight: 700; color: var(--secondary); margin: 12px 0 7px; padding-bottom: 3px; border-bottom: 2px solid var(--secondary); display: flex; align-items: center; gap: 5px; }
+.section-title.orange { color: var(--blast-orange); border-color: var(--blast-orange); }
+.section-title.green { color: var(--success); border-color: var(--success); }
+.section-title.blue { color: #1d4ed8; border-color: #1d4ed8; }
+.section-title.purple { color: #7c3aed; border-color: #7c3aed; }
+.section-title.teal { color: #0d9488; border-color: #0d9488; }
+
+/* ===== 上传区 ===== */
+.upload-zone { border: 2.5px dashed #94a3b8; border-radius: 12px; padding: 28px 20px; text-align: center; cursor: pointer; transition: all 0.25s; background: #f8fafc; position: relative; }
+.upload-zone:hover, .upload-zone.dragover { border-color: var(--secondary); background: #eff6ff; transform: translateY(-1px); }
+.upload-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.upload-icon { font-size: 2.4rem; margin-bottom: 8px; }
+.upload-title { font-weight: 700; font-size: 0.92rem; color: var(--primary); }
+.upload-sub { font-size: 0.72rem; color: var(--muted); margin-top: 4px; }
+.upload-tabs { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.upload-tab { padding: 5px 14px; border-radius: 20px; font-size: 0.74rem; cursor: pointer; border: 1.5px solid var(--border); background: white; font-weight: 600; transition: all 0.2s; }
+.upload-tab.active { background: var(--secondary); color: white; border-color: var(--secondary); }
+.upload-tab:hover:not(.active) { border-color: var(--secondary); }
+
+/* OCR状态 */
+.ocr-status { background: #f0f9ff; border: 1.5px solid #7dd3fc; border-radius: 10px; padding: 12px 14px; margin-top: 10px; display: none; }
+.ocr-status.show { display: block; }
+.ocr-status.running { background: #fefce8; border-color: #fde047; }
+.ocr-status.done { background: #f0fdf4; border-color: #86efac; }
+.ocr-status.error { background: #fef2f2; border-color: #fca5a5; }
+.ocr-progress { width: 100%; height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden; margin-top: 8px; }
+.ocr-progress-bar { height: 100%; background: linear-gradient(90deg, #2563a8, #1d4ed8); border-radius: 3px; transition: width 0.3s; width: 0%; }
+.ocr-text { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-size: 0.78rem; margin-top: 8px; max-height: 200px; overflow-y: auto; white-space: pre-wrap; color: #334155; line-height: 1.6; }
+
+/* 提取预览 */
+.extract-preview { background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 10px; padding: 12px 14px; margin-top: 10px; display: none; }
+.extract-preview.show { display: block; }
+.extract-preview h4 { font-size: 0.8rem; color: var(--success); margin-bottom: 8px; }
+.ext-item { display: flex; gap: 8px; padding: 5px 0; border-bottom: 1px dashed #bbf7d0; font-size: 0.8rem; }
+.ext-item:last-child { border-bottom: none; }
+.ext-label { color: var(--muted); min-width: 100px; font-size: 0.74rem; padding-top: 1px; }
+.ext-value { font-weight: 600; color: var(--text); }
+.ext-value .confirmed { color: var(--success); font-size: 0.72rem; font-weight: 400; margin-left: 4px; }
+.ext-value .unconfirmed { color: #f59e0b; font-size: 0.72rem; font-weight: 400; margin-left: 4px; }
+.apply-ext-btn { background: var(--success); color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 0.8rem; margin-top: 10px; font-family: inherit; font-weight: 600; display: inline-flex; align-items: center; gap: 5px; }
+.apply-ext-btn:hover { background: #166534; }
+
+/* ===== 爆炸向导 ===== */
+.blast-panel { background: #fff7ed; border: 2px solid #fed7aa; border-radius: 14px; padding: 13px; }
+.blast-panel-title { font-weight: 700; color: var(--blast-orange); font-size: 0.88rem; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+.blast-step { background: white; border: 1.5px solid #fdba74; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+.blast-step-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.step-num { background: var(--blast-orange); color: white; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 700; flex-shrink: 0; }
+.step-num.done { background: var(--success); }
+.step-title { font-weight: 600; font-size: 0.84rem; }
+.step-res { font-size: 0.72rem; color: var(--muted); margin-left: auto; }
+.d-btn, .g-btn, .p-btn { padding: 6px 12px; border-radius: 20px; font-size: 0.76rem; cursor: pointer; border: 2px solid var(--border); transition: all 0.2s; background: white; display: inline-block; }
+.d-btn:hover, .g-btn:hover, .p-btn:hover { border-color: var(--blast-orange); }
+.d-btn.active, .g-btn.active, .p-btn.active { background: var(--blast-orange); color: white; border-color: var(--blast-orange); font-weight: 700; }
+.g-btn { padding: 5px 10px; text-align: center; flex: 1; min-width: 65px; }
+.g-btn small { display: block; font-size: 0.62rem; opacity: 0.85; }
+.g-btn.active { background: #1d4ed8; border-color: #1d4ed8; }
+.btn-group { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
+.coef-tags { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0; }
+.coef-tag { background: #fff3cd; border: 1px solid #ffc107; border-radius: 5px; padding: 3px 8px; font-size: 0.72rem; }
+.coef-tag .cv { font-weight: 700; color: var(--blast-orange); }
+.blast-res { background: linear-gradient(135deg, #fff7ed, #fff0e6); border: 2px solid #fb923c; border-radius: 12px; padding: 12px 14px; margin-top: 8px; }
+.blast-res-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 0.85rem; border-bottom: 1px dashed #fed7aa; }
+.blast-res-row:last-child { border-bottom: none; }
+.blast-res-row .lb { color: var(--muted); }
+.blast-res-row .vl { font-weight: 700; }
+.blast-res-row .vl.big { color: var(--blast-orange); font-size: 1.08rem; }
+.blast-res-row.hi { background: #fff3e0; border-radius: 7px; padding: 7px 6px; margin: 2px 0; border-bottom: none; }
+.blast-note { font-size: 0.7rem; color: var(--muted); background: #fff8f0; border-radius: 6px; padding: 5px 9px; margin-top: 6px; line-height: 1.55; }
+.ret-row { background: #fff8f0; border-radius: 8px; padding: 7px 10px; margin-top: 7px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.82rem; }
+
+/* 费用模块 */
+.fee-section { background: #f7fafc; border-radius: 10px; padding: 10px; margin-bottom: 9px; }
+.fee-section .fh { font-weight: 700; font-size: 0.85rem; margin-bottom: 7px; display: flex; align-items: center; gap: 5px; }
+.fee-section.front .fh { color: #2b6cb0; }
+.fee-section.back .fh { color: #7b341e; }
+.fee-section.pkg .fh { color: #276749; }
+.mode-toggle { display: flex; background: #e2e8f0; border-radius: 10px; padding: 4px; gap: 4px; margin-bottom: 10px; }
+.mode-btn { flex: 1; padding: 7px 8px; border: none; border-radius: 8px; font-size: 0.76rem; cursor: pointer; font-weight: 600; transition: all 0.2s; background: transparent; color: var(--muted); }
+.mode-btn.active { background: white; color: var(--primary); box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+.mode-btn .hint { font-size: 0.64rem; font-weight: 400; display: block; opacity: 0.8; }
+.manual-only { display: none; }
+
+/* 参考报价表 */
+.ref-table { width: 100%; border-collapse: collapse; font-size: 0.74rem; margin-top: 6px; }
+.ref-table th { background: #edf2f7; padding: 5px 7px; text-align: left; font-weight: 600; border: 1px solid var(--border); }
+.ref-table td { padding: 5px 7px; border: 1px solid var(--border); }
+.ref-table td:nth-child(4) { text-align: right; color: var(--blast-orange); font-weight: 700; }
+.ref-table tr:nth-child(even) td { background: #f8fafc; }
+.ref-table tr.hi td { background: #fff7ed; font-weight: 600; color: var(--warning); }
+.ref-table tr.mid td { background: #fff0e6; }
+
+/* 价格网格 */
+.price-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 9px; }
+.price-card { background: linear-gradient(135deg, #f8fafc, #edf2f7); border: 1.5px solid var(--border); border-radius: 10px; padding: 9px 11px; transition: transform 0.2s; }
+.price-card:hover { transform: translateY(-2px); }
+.price-card .mn { font-size: 0.7rem; color: var(--muted); margin-bottom: 2px; }
+.price-card .mt { font-size: 0.8rem; font-weight: 600; margin-bottom: 4px; }
+.price-card .mp { font-size: 0.95rem; font-weight: 700; color: var(--steel-red); }
+.price-card .mu { font-size: 0.65rem; color: var(--muted); margin-top: 2px; }
+.price-card .ms { font-size: 0.62rem; color: var(--muted); margin-top: 2px; }
+.refresh-btn { background: var(--secondary); color: white; border: none; padding: 6px 15px; border-radius: 8px; cursor: pointer; font-size: 0.78rem; margin-bottom: 9px; display: inline-flex; align-items: center; gap: 5px; transition: background 0.2s; font-family: inherit; }
+.refresh-btn:hover { background: var(--primary); }
+
+/* 结果 */
+.result-card { background: linear-gradient(135deg, #f0fff4, #e6fffa); border: 2px solid #9ae6b4; border-radius: 14px; padding: 14px; }
+.result-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px dashed #c6f6d5; font-size: 0.85rem; }
+.result-row:last-child { border-bottom: none; }
+.result-row .lb { color: var(--muted); }
+.result-row .vl { font-weight: 700; }
+.result-row.red .vl { color: var(--steel-red); }
+.result-row.green .vl { color: var(--success); }
+.result-row.blue .vl { color: #1d4ed8; }
+.result-row.blast .vl { color: var(--blast-orange); }
+.result-row.hi { background: #f0fff4; border-radius: 7px; padding: 8px 7px; margin: 2px 0; border-bottom: none; }
+.result-row.hi .lb { font-weight: 600; font-size: 0.9rem; color: var(--text); }
+.result-row.hi .vl { font-size: 1.05rem; }
+.profit-bar-wrap { background: #e2e8f0; border-radius: 8px; height: 20px; overflow: hidden; margin: 7px 0; position: relative; }
+.profit-bar-cost { background: #b91c1c; height: 100%; float: left; transition: width 0.4s; }
+.profit-bar-profit { background: #276749; height: 100%; transition: width 0.4s; }
+.profit-bar-label { position: absolute; top: 0; left: 0; right: 0; text-align: center; font-size: 0.72rem; color: white; font-weight: 600; line-height: 20px; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+.tax-note { background: #fffaf0; border: 1px solid #fbd38d; border-radius: 8px; padding: 7px 11px; font-size: 0.76rem; color: var(--warning); margin-top: 9px; }
+.tip-box { background: #ebf8ff; border: 1px solid #90cdf4; border-radius: 8px; padding: 8px 11px; font-size: 0.74rem; color: #2b6cb0; margin-bottom: 11px; line-height: 1.5; }
+.print-btn { width: 100%; background: linear-gradient(135deg, var(--accent), #9a3412); color: white; border: none; padding: 12px; border-radius: 10px; font-size: 0.95rem; font-weight: 700; cursor: pointer; margin-top: 11px; transition: transform 0.15s, box-shadow 0.15s; display: flex; align-items: center; justify-content: center; gap: 7px; font-family: inherit; }
+.print-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(201,50,10,0.35); }
+.divider { height: 1px; background: var(--border); margin: 9px 0; }
+.cost-bar-wrap { margin: 7px 0; }
+.cost-bar-item { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; font-size: 0.76rem; }
+.cost-bar-item .barlbl { width: 60px; color: var(--muted); font-size: 0.7rem; }
+.cost-bar-item .barbg { flex: 1; height: 12px; background: #edf2f7; border-radius: 6px; overflow: hidden; }
+.cost-bar-item .barfill { height: 100%; border-radius: 6px; transition: width 0.4s; }
+.cost-bar-item .barpct { width: 38px; text-align: right; font-size: 0.7rem; }
+.cost-bar-item .baramt { width: 75px; text-align: right; font-size: 0.7rem; color: var(--muted); }
+.hongli-badge { background: linear-gradient(135deg, #7c3aed, #6d28d9); color: white; border-radius: 8px; padding: 6px 12px; font-size: 0.74rem; display: inline-flex; align-items: center; gap: 6px; margin-bottom: 9px; }
+.hongli-badge .hl-text { line-height: 1.4; }
+.quote-box { background: #f5f3ff; border: 2px solid #c4b5fd; border-radius: 10px; padding: 10px 13px; font-size: 0.78rem; margin-top: 9px; line-height: 1.7; }
+.quote-box .q-title { font-weight: 700; color: #6d28d9; margin-bottom: 5px; }
+.quote-box .q-item { display: flex; gap: 6px; margin-bottom: 2px; }
+.quote-box .q-label { color: var(--muted); flex-shrink: 0; min-width: 80px; }
+.quote-box .q-val { color: #1a202c; font-weight: 600; }
+.quote-copy { background: #7c3aed; color: white; border: none; padding: 5px 12px; border-radius: 6px; font-size: 0.74rem; cursor: pointer; margin-top: 7px; font-family: inherit; }
+.quote-copy:hover { background: #6d28d9; }
+.switch-mode-bar { background: linear-gradient(135deg, #1d4ed8, #2563a8); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.switch-mode-bar .sml { color: white; font-size: 0.8rem; font-weight: 600; }
+.mode-selector { display: flex; background: rgba(255,255,255,0.2); border-radius: 8px; padding: 3px; gap: 3px; }
+.mode-opt { padding: 5px 12px; border-radius: 6px; font-size: 0.74rem; cursor: pointer; color: rgba(255,255,255,0.75); border: none; background: transparent; font-weight: 600; transition: all 0.2s; font-family: inherit; }
+.mode-opt.active { background: white; color: var(--primary); }
+.step-indicator { display: inline-flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.2); border-radius: 6px; padding: 3px 8px; font-size: 0.7rem; color: white; }
+
+/* 密度说明 */
+.density-hint { font-size: 0.68rem; color: var(--muted); margin-top: 2px; }
+.density-tag { display: inline-block; background: #e0f2fe; color: #0369a1; border-radius: 4px; padding: 1px 5px; font-size: 0.65rem; margin-left: 4px; }
+.del-row-btn { display: inline-block; }
+.product-row .del-row-btn { display: none; }
+.product-row[data-index="0"] .del-row-btn { display: none !important; }
+input[type="date"] { font-family: inherit; }
+.m-tech { width: auto; cursor: pointer; }
+
+@media (max-width: 600px) {
+  .field { min-width: 100%; }
+  .price-grid { grid-template-columns: 1fr 1fr; }
+  .row { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🏭 爆炸复合板成本预估系统 v5</h1>
+  <div class="subtitle">支持上传文件/图片自动解析 + 厚度×长度×宽度×密度÷1,000,000,000×张数算原材料用量 + 多规格分开计算求和 · 旌德弘力</div>
+</header>
+
+<!-- 金太阳订单信息 -->
+<div class="card" style="border:3px solid #7c3aed;">
+  <div class="card-header purple" style="background:#7c3aed;">📋 当前订单：山东金太阳工业设备集团有限公司</div>
+  <div class="card-body" style="padding:10px 14px;">
+    <div class="row" style="gap:16px;">
+      <div style="flex:1;min-width:120px;">
+        <div style="font-size:0.7rem;color:#718096;">合同编号</div>
+        <div style="font-weight:700;color:#7c3aed;font-size:0.9rem;">JS260320018</div>
+      </div>
+      <div style="flex:1;min-width:120px;">
+        <div style="font-size:0.7rem;color:#718096;">应用场景</div>
+        <div style="font-weight:700;font-size:0.9rem;">容器</div>
+      </div>
+      <div style="flex:1;min-width:120px;">
+        <div style="font-size:0.7rem;color:#718096;">交货时间</div>
+        <div style="font-weight:700;font-size:0.9rem;">5月2日</div>
+      </div>
+      <div style="flex:1;min-width:120px;">
+        <div style="font-size:0.7rem;color:#718096;">交货地点</div>
+        <div style="font-weight:700;font-size:0.9rem;">济南长清区张夏工业园</div>
+      </div>
+    </div>
+    <div class="tip-box" style="margin-top:8px;background:#f5f3ff;border-color:#c4b5fd;color:#6d28d9;">
+      <strong>订单明细（共4行/18张/24.28吨）：</strong>
+      <table style="width:100%;border-collapse:collapse;font-size:0.75rem;margin-top:6px;">
+        <tr style="background:#e9d5ff;">
+          <th style="padding:3px 6px;text-align:left;">序号</th>
+          <th style="padding:3px 6px;">钢种</th>
+          <th style="padding:3px 6px;">规格</th>
+          <th style="padding:3px 6px;">尺寸</th>
+          <th style="padding:3px 6px;">单重</th>
+          <th style="padding:3px 6px;">张数</th>
+          <th style="padding:3px 6px;">吨位</th>
+        </tr>
+        <tr><td style="padding:2px 6px;">1</td><td>S32168+Q345R</td><td>3+12mm</td><td>2200×5750</td><td>1.493t</td><td>12张</td><td>17.916t</td></tr>
+        <tr style="background:#f5f3ff;"><td style="padding:2px 6px;">2</td><td>S32168+Q345R</td><td>3+12mm</td><td>2000×5750</td><td>1.357t</td><td>2张</td><td>2.714t</td></tr>
+        <tr><td style="padding:2px 6px;">3</td><td>S32168+Q345R</td><td>3+12mm</td><td>850×5750</td><td>0.576t</td><td>2张</td><td>1.152t</td></tr>
+        <tr style="background:#f5f3ff;"><td style="padding:2px 6px;">4</td><td>S32168+Q345R</td><td>3+12mm</td><td>2300×4600</td><td>1.249t</td><td>2张</td><td>2.498t</td></tr>
+        <tr style="background:#7c3aed;color:white;font-weight:700;">
+          <td style="padding:2px 6px;">合计</td><td colspan="2">B1级·NB/T47002.1-2019</td>
+          <td style="padding:2px 6px;">—</td><td style="padding:2px 6px;">—</td>
+          <td style="padding:2px 6px;">18张</td><td style="padding:2px 6px;">24.28t</td>
+        </tr>
+      </table>
+      <div style="margin-top:5px;font-size:0.72rem;">
+        <strong>技术要求：</strong>需出具含晶间腐蚀检测的合格报告 · 板面平整 · 边部齐整 · 理算计重
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 金太阳订单各行成本对比表 -->
+<div class="card" style="border:3px solid #059669;margin-top:8px;">
+  <div class="card-header" style="background:#059669;color:white;">💰 金太阳订单 · 各行成本估算（S32168+Q345R 3+12mm B1级 · 合同总价90万元/13%税率）</div>
+  <div class="card-body" style="padding:8px 12px;font-size:0.73rem;">
+    <table style="width:100%;border-collapse:collapse;">
+      <tr style="background:#d1fae5;color:#065f46;font-size:0.72rem;">
+        <th style="padding:4px 5px;text-align:center;">行</th>
+        <th style="padding:4px 5px;text-align:left;">规格尺寸</th>
+        <th style="padding:4px 5px;text-align:center;">张数</th>
+        <th style="padding:4px 5px;text-align:right;">成品量<br><span style="font-weight:400;font-size:0.65rem;">吨</span></th>
+        <th style="padding:4px 5px;text-align:right;">复材<br><span style="font-weight:400;font-size:0.65rem;">元</span></th>
+        <th style="padding:4px 5px;text-align:right;">基材<br><span style="font-weight:400;font-size:0.65rem;">元</span></th>
+        <th style="padding:4px 5px;text-align:right;">爆炸费<br><span style="font-weight:400;font-size:0.65rem;">元</span></th>
+        <th style="padding:4px 5px;text-align:right;">加工费<br><span style="font-weight:400;font-size:0.65rem;">前+后+包</span></th>
+        <th style="padding:4px 5px;text-align:right;">倒转费<br><span style="font-weight:400;font-size:0.65rem;">元</span></th>
+        <th style="padding:4px 5px;text-align:right;">废钢冲减<br><span style="font-weight:400;font-size:0.65rem;">元</span></th>
+        <th style="padding:4px 5px;text-align:right;background:#fbbf24;color:#78350f;">💰总成本<br><span style="font-weight:400;font-size:0.65rem;">元</span></th>
+        <th style="padding:4px 5px;text-align:right;">单位成本<br><span style="font-weight:400;font-size:0.65rem;">元/吨</span></th>
+        <th style="padding:4px 5px;text-align:right;">分摊合同<br><span style="font-weight:400;font-size:0.65rem;">元</span></th>
+        <th style="padding:4px 5px;text-align:right;background:#34d399;color:#022c22;">📈利润<br><span style="font-weight:400;font-size:0.65rem;">元</span></th>
+        <th style="padding:4px 5px;text-align:right;background:#a7f3d0;color:#065f46;">利润率</th>
+      </tr>
+      <!-- 第1行 -->
+      <tr style="background:#f0fdf4;">
+        <td style="padding:3px 5px;text-align:center;font-weight:700;">1</td>
+        <td style="padding:3px 5px;">2200×5750mm<br><span style="font-size:0.65rem;color:#6b7280;">面积151.80㎡·大板×1.3·批量×0.95</span></td>
+        <td style="padding:3px 5px;text-align:center;">12</td>
+        <td style="padding:3px 5px;text-align:right;">17.916</td>
+        <td style="padding:3px 5px;text-align:right;">133,791</td>
+        <td style="padding:3px 5px;text-align:right;">35,650</td>
+        <td style="padding:3px 5px;text-align:right;">26,996<br><span style="font-size:0.62rem;color:#059669;">178元/㎡</span></td>
+        <td style="padding:3px 5px;text-align:right;">36,101<br><span style="font-size:0.62rem;color:#6b7280;">前+后+包</span></td>
+        <td style="padding:3px 5px;text-align:right;">3,870</td>
+        <td style="padding:3px 5px;text-align:right;color:#dc2626;">-8,086</td>
+        <td style="padding:3px 5px;text-align:right;font-weight:700;background:#fef3c7;">228,322</td>
+        <td style="padding:3px 5px;text-align:right;">12,744</td>
+        <td style="padding:3px 5px;text-align:right;">587,701</td>
+        <td style="padding:3px 5px;text-align:right;font-weight:700;color:#059669;">359,379</td>
+        <td style="padding:3px 5px;text-align:right;font-weight:700;color:#059669;">61.1%</td>
+      </tr>
+      <!-- 第2行 -->
+      <tr style="background:#f5f3ff;">
+        <td style="padding:3px 5px;text-align:center;font-weight:700;">2</td>
+        <td style="padding:3px 5px;">2000×5750mm<br><span style="font-size:0.65rem;color:#6b7280;">面积23.00㎡·大板×1.3·无批量折扣</span></td>
+        <td style="padding:3px 5px;text-align:center;">2</td>
+        <td style="padding:3px 5px;text-align:right;">2.714</td>
+        <td style="padding:3px 5px;text-align:right;">20,267</td>
+        <td style="padding:3px 5px;text-align:right;">5,400</td>
+        <td style="padding:3px 5px;text-align:right;">4,306<br><span style="font-size:0.62rem;color:#7c3aed;">187元/㎡</span></td>
+        <td style="padding:3px 5px;text-align:right;">5,469</td>
+        <td style="padding:3px 5px;text-align:right;">487</td>
+        <td style="padding:3px 5px;text-align:right;color:#dc2626;">≈0</td>
+        <td style="padding:3px 5px;text-align:right;font-weight:700;background:#fef3c7;">35,930</td>
+        <td style="padding:3px 5px;text-align:right;">13,239</td>
+        <td style="padding:3px 5px;text:right;">89,028</td>
+        <td style="padding:3px 5px;text-align:right;font-weight:700;color:#059669;">53,098</td>
+        <td style="padding:3px 5px;text-align:right;font-weight:700;color:#059669;">59.6%</td>
+      </tr>
+      <!-- 第3行 -->
+      <tr style="background:#f0fdf4;">
+        <td style="padding:3px 5px;text-align:center;font-weight:700;">3</td>
+        <td style="padding:3px 5px;">850×5750mm<br><span style="font-size:0.65rem;color:#6b7280;">面积9.78㎡·小板×1.187·窄板×1.26</span></td>
+        <td style="padding:3px 5px;text-align:center;">2</td>
+        <td style="padding:3px 5px;text-align:right;">1.152</td>
+        <td style="padding:3px 5px;text-align:right;">8,603</td>
+        <td style="padding:3px 5px;text-align:right;">2,292</td>
+        <td style="padding:3px 5px;text-align:right;">1,671<br><span style="font-size:0.62rem;color:#059669;">171元/㎡</span></td>
+        <td style="padding:3px 5px;text-align:right;">2,321</td>
+        <td style="padding:3px 5px;text-align:right;">207</td>
+        <td style="padding:3px 5px;text-align:right;color:#dc2626;">≈0</td>
+        <td style="padding:3px 5px;text-align:right;font-weight:700;background:#fef3c7;">15,094</td>
+        <td style="padding:3px 5px;text-align:right;">13,103</td>
+        <td style="padding:3px 5px;text-align:right;">37,789</td>
+        <td style="padding:3px 5px;text-align:right;font-weight:700;color:#059669;">22,695</td>
+        <td style="padding:3px 5px;text-align:right;font-weight:700;color:#059669;">60.1%</td>
+      </tr>
+      <!-- 第4行 -->
+      <tr style="background:#f5f3ff;">
+        <td style="padding:3px 5px;text-align:center;font-weight:700;">4</td>
+        <td style="padding:3px 5px;">2300×4600mm<br><span style="font-size:0.65rem;color:#6b7280;">面积21.16㎡·大板×1.3·无批量折扣</span></td>
+        <td style="padding:3px 5px;text-align:center;">2</td>
+        <td style="padding:3px 5px;text-align:right;">2.498</td>
+        <td style="padding:3px 5px;text-align:right;">18,654</td>
+        <td style="padding:3px 5px;text-align:right;">4,971</td>
+        <td style="padding:3px 5px;text-align:right;">3,961<br><span style="font-size:0.62rem;color:#7c3aed;">187元/㎡</span></td>
+        <td style="padding:3px 5px;text-align:right;">5,033</td>
+        <td style="padding:3px 5px;text-align:right;">448</td>
+        <td style="padding:3px 5px;text-align:right;color:#dc2626;">≈0</td>
+        <td style="padding:3px 5px;text-align:right;font-weight:700;background:#fef3c7;">33,068</td>
+        <td style="padding:3px 5px;text-align:right;">13,238</td>
+        <td style="padding:3px 5px;text-align:right;">81,942</td>
+        <td style="padding:3px 5px;text-align:right;font-weight:700;color:#059669;">48,874</td>
+        <td style="padding:3px 5px;text-align:right;font-weight:700;color:#059669;">59.6%</td>
+      </tr>
+      <!-- 合计 -->
+      <tr style="background:#065f46;color:white;font-weight:700;font-size:0.78rem;">
+        <td style="padding:5px 5px;text-align:center;">合</td>
+        <td style="padding:5px 5px;">—</td>
+        <td style="padding:5px 5px;text-align:center;">18张</td>
+        <td style="padding:5px 5px;text-align:right;">24.280</td>
+        <td style="padding:5px 5px;text-align:right;">181,315</td>
+        <td style="padding:5px 5px;text-align:right;">48,313</td>
+        <td style="padding:5px 5px;text-align:right;">36,934</td>
+        <td style="padding:5px 5px;text-align:right;">48,924</td>
+        <td style="padding:5px 5px;text-align:right;">5,012</td>
+        <td style="padding:5px 5px;text-align:right;color:#fca5a5;">-8,086</td>
+        <td style="padding:5px 5px;text-align:right;background:#fbbf24;color:#78350f;">312,414</td>
+        <td style="padding:5px 5px;text-align:right;">—</td>
+        <td style="padding:5px 5px;text-align:right;">796,460</td>
+        <td style="padding:5px 5px;text-align:right;color:#6ee7b7;">484,046</td>
+        <td style="padding:5px 5px;text-align:right;color:#a7f3d0;">60.8%</td>
+      </tr>
+    </table>
+    <div style="margin-top:7px;padding:6px 10px;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;font-size:0.7rem;color:#92400e;">
+      <strong>⚠️ 提示：</strong>合同总价90万元（13%税率，不含税79.6万元，约32,800元/吨），利润率约61%——需确认：<br>
+      ① 实际合同单价是否正确？② 是否遗漏晶间腐蚀检测费（≈500~1500元/张）？③ 运输至济南费用是否含在合同内？
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- ===== 模式切换：上传文件 vs 手动输入 ===== -->
+<div class="switch-mode-bar">
+  <span class="sml">📂 数据来源：</span>
+  <div class="mode-selector">
+    <button class="mode-opt active" id="mode-file" onclick="setInputMode('file')">
+      📄 上传文件/图片解析
+    </button>
+    <button class="mode-opt" id="mode-manual" onclick="setInputMode('manual')">
+      ✏️ 手动输入
+    </button>
+  </div>
+  <div class="step-indicator" id="step-indic">
+    <span>🔄 步骤：</span>
+    <span id="si-step1" class="active">①上传</span>
+    <span id="si-step2">②解析</span>
+    <span id="si-step3">③确认</span>
+  </div>
+</div>
+
+<!-- ===== 上传解析区 ===== -->
+<div class="card" id="file-section">
+  <div class="card-header teal">📄 上传生产通知单 / Excel / 图片（自动提取钢种、厚度、尺寸、重量）</div>
+  <div class="card-body">
+
+    <div class="upload-tabs">
+      <div class="upload-tab active" onclick="setUploadType('image')" id="tab-image">📷 图片/扫描件</div>
+      <div class="upload-tab" onclick="setUploadType('pdf')" id="tab-pdf">📑 PDF文档</div>
+      <div class="upload-tab" onclick="setUploadType('excel')" id="tab-excel">📊 Excel文件</div>
+    </div>
+
+    <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
+      <input type="file" id="file-input" accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.xlsx,.xls" onchange="handleFile(this.files[0])">
+      <div class="upload-icon" id="upload-icon">📤</div>
+      <div class="upload-title" id="upload-title">点击上传，或拖拽文件到此处</div>
+      <div class="upload-sub" id="upload-sub">支持：JPG/PNG/PDF/Excel（.xlsx/.xls）· 识别钢种、厚度、尺寸、重量</div>
+    </div>
+
+    <!-- OCR状态 -->
+    <div class="ocr-status" id="ocr-status">
+      <div style="display:flex;align-items:center;gap:8px;font-size:0.82rem;">
+        <span id="ocr-icon">⏳</span>
+        <span id="ocr-msg">正在初始化 OCR 引擎...</span>
+      </div>
+      <div class="ocr-progress"><div class="ocr-progress-bar" id="ocr-progress-bar"></div></div>
+      <div class="ocr-text" id="ocr-text" style="display:none;"></div>
+    </div>
+
+    <!-- 提取预览 -->
+    <div class="extract-preview" id="extract-preview">
+      <h4>✅ 数据提取完成（请核对后点击「确认填入」）</h4>
+      <div id="extract-items"></div>
+      <button class="apply-ext-btn" onclick="applyExtracted()">✅ 确认填入表单</button>
+    </div>
+
+    <div class="tip-box" style="margin-top:10px;">
+      💡 <strong>上传说明：</strong>上传生产通知单（图片/PDF）或材料清单（Excel），系统将自动识别钢种、复层厚度、基层厚度、长宽尺寸、重量、技术要求等信息。没有文件时请切换到「手动输入」模式。
+    </div>
+    
+    <div class="tip-box" style="background:#fef9c3;border-color:#fde047;color:#854d0e;margin-top:8px;">
+      📸 <strong>提升识别准确度技巧：</strong>
+      <br>• 拍照时尽量平正、避免倾斜 / 光线均匀、不要过暗或反光
+      <br>• 放大拍或扫描件优先（手机微距模式效果更好）
+      <br>• 图片会自动放大2倍 + 灰度对比度增强处理
+      <br>• 低置信度字段会<strong>标黄提示</strong>，请人工核对
+    </div>
+
+  </div>
+</div>
+
+<!-- ===== 手动输入区 ===== -->
+<div class="card" id="manual-section" style="display:none;">
+  <div class="card-header gray">✏️ 手动输入生产通知单</div>
+  <div class="card-body">
+
+    <!-- 订单基本信息 -->
+    <div class="section-title blue">📋 订单基本信息</div>
+    <div class="row">
+      <div class="field">
+        <label>客户名称</label>
+        <input type="text" id="m-customer" placeholder="如：山东金太阳工业设备集团有限公司" value="山东金太阳工业设备集团有限公司">
+      </div>
+      <div class="field">
+        <label>合同编号</label>
+        <input type="text" id="m-contract" placeholder="如：JS260320018" value="JS260320018">
+      </div>
+      <div class="field">
+        <label>应用场景</label>
+        <select id="m-scenario">
+          <option value="容器" selected>容器</option>
+          <option value="换热器">换热器</option>
+          <option value="塔器">塔器</option>
+          <option value="储罐">储罐</option>
+          <option value="管道">管道</option>
+          <option value="其他">其他</option>
+        </select>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>交货日期</label>
+        <input type="date" id="m-delivery-date" value="2026-05-02">
+      </div>
+      <div class="field">
+        <label>交货地点</label>
+        <input type="text" id="m-delivery-place" placeholder="如：济南长清区张夏工业园" value="济南长清区张夏工业园">
+      </div>
+      <div class="field">
+        <label>技术等级</label>
+        <select id="m-grade">
+          <option value="B1" selected>B1级（承压）</option>
+          <option value="B2">B2级（防腐）</option>
+          <option value="B0">B0级（最高级）</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 产品明细（可添加多行） -->
+    <div class="section-title orange">📦 产品明细（可多行）</div>
+    <div id="product-list">
+      <!-- 默认一行 -->
+      <div class="product-row" data-index="0" style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:10px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <strong style="font-size:0.8rem;color:#c2410c;">#1 产品行</strong>
+          <button class="del-row-btn" onclick="delProductRow(this)" style="background:#ef4444;color:white;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:0.72rem;display:none;">删除</button>
+        </div>
+        <div class="row">
+          <div class="field" style="min-width:130px;">
+            <label>复层材质</label>
+            <select class="m-clad-mat" onchange="onManualMatChange(this)">
+              <option value="ss304" selected>SUS304 不锈钢</option>
+              <option value="ss316l">SUS316L 不锈钢</option>
+              <option value="ta2">TA2 钛板</option>
+              <option value="ni201">Ni201/Ni200 纯镍</option>
+              <option value="inconel625">Inconel625 镍基</option>
+              <option value="zircon">锆 R60702</option>
+            </select>
+          </div>
+          <div class="field" style="min-width:100px;">
+            <label>复层厚度mm</label>
+            <input type="number" class="m-clad-thick" value="3" min="0.5" step="0.5">
+          </div>
+          <div class="field" style="min-width:130px;">
+            <label>基层材质</label>
+            <select class="m-base-mat" onchange="onManualMatChange(this)">
+              <option value="q345r" selected>Q345R 碳钢容器板</option>
+              <option value="q355">Q355 低合金钢板</option>
+              <option value="sa516">SA516Gr70N 美标</option>
+            </select>
+          </div>
+          <div class="field" style="min-width:100px;">
+            <label>基层厚度mm</label>
+            <input type="number" class="m-base-thick" value="12" min="1" step="1">
+          </div>
+        </div>
+        <div class="row" style="margin-top:6px;">
+          <div class="field" style="min-width:90px;">
+            <label>长度mm</label>
+            <input type="number" class="m-length" value="2200" min="100">
+          </div>
+          <div class="field" style="min-width:90px;">
+            <label>宽度mm</label>
+            <input type="number" class="m-width" value="5750" min="100">
+          </div>
+          <div class="field" style="min-width:70px;">
+            <label>数量(块)</label>
+            <input type="number" class="m-count" value="12" min="1">
+          </div>
+          <div class="field" style="min-width:90px;">
+            <label>单块重量(吨)</label>
+            <input type="number" class="m-unit-wt" value="1.493" min="0.001" step="0.001">
+          </div>
+          <div class="field" style="min-width:100px;">
+            <label>总重量(吨)</label>
+            <input type="number" class="m-total-wt auto" readonly style="background:#e0f2fe;border-color:#7dd3fc;color:#0369a1;font-weight:700;">
+          </div>
+        </div>
+        <div class="row" style="margin-top:6px;">
+          <div class="field" style="min-width:120px;">
+            <label>复材密度(g/cm³)</label>
+            <input type="number" class="m-clad-density" value="7.93" min="1" max="20" step="0.01" oninput="onManualDensityChange(this)">
+          </div>
+          <div class="field" style="min-width:120px;">
+            <label>基材密度(g/cm³)</label>
+            <input type="number" class="m-base-density" value="7.85" min="1" max="20" step="0.01" oninput="onManualDensityChange(this)">
+          </div>
+          <div class="field" style="min-width:120px;">
+            <label>复材体积(mm³)=厚×长×宽</label>
+            <input type="number" class="m-clad-vol auto" readonly style="background:#f0fdf4;border-color:#86efac;color:#166534;font-weight:600;">
+          </div>
+          <div class="field" style="min-width:120px;">
+            <label>基材体积(mm³)=厚×长×宽</label>
+            <input type="number" class="m-base-vol auto" readonly style="background:#f0fdf4;border-color:#86efac;color:#166534;font-weight:600;">
+          </div>
+        </div>
+        <!-- 自动计算结果行 -->
+        <div class="tip-box" style="background:#f0fdf4;border-color:#86efac;color:#166534;margin-top:6px;padding:6px 10px;">
+          <strong>📐 本规格材料用量：</strong>
+          <span>复材 <span class="m-clad-wt" style="font-weight:700;">—</span> 吨 &nbsp;|&nbsp; 基材 <span class="m-base-wt" style="font-weight:700;">—</span> 吨 &nbsp;|&nbsp; 合计 <span class="m-total-mat-wt" style="font-weight:700;color:#c2410c;">—</span> 吨</span>
+          <br><span style="font-size:0.66rem;">公式：厚度×长度×宽度×密度÷1,000,000,000×张数 = 用量（吨）</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 添加产品行按钮 -->
+    <div style="text-align:center;margin:8px 0;">
+      <button onclick="addProductRow()" style="background:#7c3aed;color:white;border:none;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:0.82rem;font-weight:600;font-family:inherit;">
+        ➕ 添加产品行
+      </button>
+    </div>
+
+    <!-- 合计信息 -->
+    <div class="section-title teal">📊 汇总信息</div>
+    <div class="row">
+      <div class="field">
+        <label>基材总重量（吨）</label>
+        <input type="number" id="m-total-base-wt" class="auto" readonly style="background:#dbeafe;border-color:#93c5fd;color:#1d4ed8;font-weight:700;font-size:1.05rem;">
+      </div>
+      <div class="field">
+        <label>复材总重量（吨）</label>
+        <input type="number" id="m-total-clad-wt" class="auto" readonly style="background:#fce7f3;border-color:#f9a8d4;color:#be185d;font-weight:700;font-size:1.05rem;">
+      </div>
+      <div class="field">
+        <label>材料总重量（吨）</label>
+        <input type="number" id="m-total-prod-wt" class="auto" readonly style="background:#e0f2fe;border-color:#7dd3fc;color:#0369a1;font-weight:700;font-size:1.05rem;">
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>产品总张数</label>
+        <input type="number" id="m-total-count" class="auto" readonly style="background:#e0f2fe;border-color:#7dd3fc;color:#0369a1;font-weight:700;">
+      </div>
+      <div class="field">
+        <label>总表面积（㎡）</label>
+        <input type="number" id="m-total-area" class="auto" readonly style="background:#e0f2fe;border-color:#7dd3fc;color:#0369a1;font-weight:700;">
+      </div>
+    </div>
+
+    <!-- 技术要求 -->
+    <div class="section-title purple" style="margin-top:10px;">🔍 技术要求</div>
+    <div class="row">
+      <div class="field" style="flex:2;">
+        <label>技术要求（可多选）</label>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">
+          <label style="display:flex;align-items:center;gap:4px;font-size:0.78rem;cursor:pointer;">
+            <input type="checkbox" class="m-tech" value="探伤"> 探伤(UT/RT)
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:0.78rem;cursor:pointer;">
+            <input type="checkbox" class="m-tech" value="热处理"> 热处理
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:0.78rem;cursor:pointer;">
+            <input type="checkbox" class="m-tech" value="校平"> 校平
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:0.78rem;cursor:pointer;">
+            <input type="checkbox" class="m-tech" value="切边"> 切边
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:0.78rem;cursor:pointer;">
+            <input type="checkbox" class="m-tech" value="晶腐检测"> 晶间腐蚀检测
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:0.78rem;cursor:pointer;">
+            <input type="checkbox" class="m-tech" value="ASTM"> ASTM/ASME标准
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:0.78rem;cursor:pointer;">
+            <input type="checkbox" class="m-tech" value="理算计重"> 理算计重
+          </label>
+        </div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:6px;">
+      <div class="field" style="flex:2;">
+        <label>备注说明</label>
+        <textarea id="m-notes" placeholder="其他特殊要求..." style="min-height:60px;">需出具含晶间腐蚀检测的合格报告 · 板面平整 · 边部齐整</textarea>
+      </div>
+    </div>
+
+    <!-- 一键填入计算器 -->
+    <div style="background:#f5f3ff;border:2px solid #c4b5fd;border-radius:10px;padding:12px;margin-top:12px;text-align:center;">
+      <div style="font-size:0.82rem;color:#6d28d9;margin-bottom:8px;">📋 确认产品信息后，点击下方按钮自动填入成本计算器</div>
+      <button onclick="applyManualToCalculator()" style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:white;border:none;padding:10px 28px;border-radius:10px;cursor:pointer;font-size:0.88rem;font-weight:700;font-family:inherit;">
+        ✅ 填入成本计算器
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- 0. 弘力信息 -->
+<div class="card">
+  <div class="card-header purple">📋 旌德弘力 · 2026年爆炸加工费报价参考</div>
+  <div class="card-body">
+    <div class="hongli-badge">
+      <span style="font-size:0.9rem;">🏭</span>
+      <span class="hl-text"><strong>安徽弘力金属复合材料有限公司</strong><br>厂址：安徽省宣城市旌德县庙首镇祥云村 · 爆炸复合专业工厂</span>
+    </div>
+    <div class="section-title orange">💥 基准加工费（仅爆炸，无额外处理，元/㎡）</div>
+    <table class="ref-table">
+      <tr><th>材料组合</th><th>牌号示例</th><th>等级</th><th>基准单价</th><th>备注</th></tr>
+      <tr class="hi"><td>不锈钢/碳钢</td><td>304+Q345R / 316L+Q345R</td><td>B2</td><td>100~150 元/㎡</td><td>常规尺寸/厚度</td></tr>
+      <tr class="mid"><td>不锈钢/碳钢</td><td>304+Q345R</td><td>B1</td><td>120~180 元/㎡</td><td>承压用途</td></tr>
+      <tr class="hi"><td>钛/钢</td><td>TA2+Q345R / TA1+Q245R</td><td>B2</td><td>280~380 元/㎡</td><td>高难度复合</td></tr>
+      <tr class="mid"><td>钛/钢</td><td>TA2+Q345R</td><td>B1</td><td>340~460 元/㎡</td><td>B1级承压</td></tr>
+      <tr class="hi"><td>镍/钢（纯镍）</td><td>Ni201/Ni200 + SA516</td><td>B2</td><td>350~480 元/㎡</td><td>中等偏高</td></tr>
+      <tr class="hi"><td>锆/钢、钽/钢</td><td>锆R60702+碳钢</td><td>—</td><td>500~800 元/㎡起</td><td>最难复合，需询价确认</td></tr>
+    </table>
+    <div class="blast-note">⚠️ 以上为<strong>2026年安徽旌德本地价</strong>（弘力金属），含炸药+人工+场地操作费。运输费（倒转费）另计。批量、特殊规格、BR工艺另议。</div>
+  </div>
+</div>
+
+<!-- 1. 实时原材料价格 -->
+<div class="card">
+  <div class="card-header blue">🌐 实时原材料参考价格</div>
+  <div class="card-body">
+    <div class="tip-box">📡 数据来源：我的钢铁网（Mysteel）、长江有色金属网等。更新于 <strong id="price-date">2026年4月22日</strong>。点击下方卡片价格可直接填入计算器。</div>
+    <button class="refresh-btn" onclick="refreshPrices()">🔄 刷新价格</button>
+    <div class="price-grid" id="price-grid"></div>
+  </div>
+</div>
+
+<!-- 2. 产品参数 -->
+<div class="card">
+  <div class="card-header">📋 产品基本信息</div>
+  <div class="card-body">
+    <div class="row">
+      <div class="field">
+        <label>产品类型</label>
+        <select id="product-type" onchange="onProductChange()">
+          <option value="ss304">不锈钢复合板（SUS304 + Q345R）</option>
+          <option value="ss316">不锈钢复合板（SUS316L + Q345R）</option>
+          <option value="titanium">钛钢复合板（TA2 + Q345R）</option>
+          <option value="nickel">镍钢复合板（Ni201/Ni200 + 碳钢）</option>
+          <option value="nickel625">镍基复合板（Inconel625 + SA516）</option>
+          <option value="zircon">锆钢复合板（锆R60702 + 碳钢）</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>产品规格 <span class="hint">如 S316L+Q345R 3+20</span></label>
+        <input type="text" id="spec" placeholder="如：S316L+Q345R 3+20">
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>产成品重量（吨）</label>
+        <input type="number" id="product-qty" value="17.916" min="0.001" step="0.001" oninput="onAnyWeightChange('product')">
+      </div>
+      <div class="field">
+        <label>组坯重量（吨）</label>
+        <input type="number" id="billet-qty" value="21.5" min="0.001" step="0.001" oninput="onAnyWeightChange('billet')">
+      </div>
+      <div class="field">
+        <label>成材率（%）</label>
+        <input type="number" id="yield-rate" value="83.33" min="50" max="99" step="0.01" oninput="onAnyWeightChange('yield')">
+      </div>
+    </div>
+    <!-- 废钢率区间显示 -->
+    <div class="tip-box" style="background:#fff7ed;border-color:#fed7aa;color:#9a3412;margin-top:6px;" id="scrap-rate-box">
+      <strong>⚙️ 废钢率（区间）：</strong>
+      <span id="scrap-rate-range" style="font-weight:700;font-size:1.05em;">—</span>
+      &nbsp;&nbsp;|&nbsp;&nbsp;
+      <strong>废钢量区间：</strong>
+      <span id="scrap-qty-range" style="font-weight:700;">—</span>
+      <br>
+      <span style="font-size:0.68rem;">公式：(组坯重量 − 产成品重量) × 85%~90%，含烧损+工艺损耗</span>
+    </div>
+  </div>
+</div>
+
+<!-- 3. 原材料 -->
+<div class="card">
+  <div class="card-header blue">🏭 原材料成本（厚度×长度×宽度×密度÷1,000,000,000×张数）</div>
+  <div class="card-body">
+
+    <div class="tip-box" style="background:#eff6ff;border-color:#93c5fd;color:#1e40af;margin-bottom:10px;">
+      📐 <strong>计算规则：</strong>
+      每行填写一个规格的尺寸，<strong>基材用量 = 基材厚 × 长 × 宽 × 基材密度 ÷ 1,000,000,000 × 张数</strong>，
+      <strong>复材用量 = 复材厚 × 长 × 宽 × 复材密度 ÷ 1,000,000,000 × 张数</strong>，
+      不同规格分开计算后汇总。密度请手动填写（Q345R≈7.85，SUS304≈7.93，SUS316L≈7.98，TA2≈4.51，Ni201≈8.89）。
+    </div>
+
+    <!-- 规格列表 -->
+    <div id="mat-spec-list">
+      <!-- 规格行模板，由JS动态生成第一行 -->
+    </div>
+
+    <!-- 操作按钮 -->
+    <div style="display:flex;gap:10px;margin:8px 0;flex-wrap:wrap;">
+      <button onclick="addMatSpecRow()" style="background:#7c3aed;color:white;border:none;padding:7px 18px;border-radius:8px;cursor:pointer;font-size:0.82rem;font-weight:600;font-family:inherit;">
+        ➕ 添加规格
+      </button>
+      <button onclick="importSpecsFromManual()" style="background:#0891b2;color:white;border:none;padding:7px 18px;border-radius:8px;cursor:pointer;font-size:0.82rem;font-weight:600;font-family:inherit;">
+        📋 从订单明细导入
+      </button>
+    </div>
+
+    <!-- 原材料汇总 -->
+    <div class="tip-box" style="background:#fff7ed;border-color:#fed7aa;color:#9a3412;margin-top:4px;">
+      📦 <strong>原材料合计：</strong>
+      <span style="display:inline-block;background:#dbeafe;border:1px solid #93c5fd;color:#1d4ed8;padding:2px 10px;border-radius:6px;font-weight:700;">基材 <span id="mat-base-wt" style="font-weight:700;">0.000</span> 吨</span>
+      &nbsp;+&nbsp;
+      <span style="display:inline-block;background:#fce7f3;border:1px solid #f9a8d4;color:#be185d;padding:2px 10px;border-radius:6px;font-weight:700;">复材 <span id="mat-clad-wt" style="font-weight:700;">0.000</span> 吨</span>
+      &nbsp;=&nbsp;
+      <span style="display:inline-block;background:#f0fdf4;border:1px solid #86efac;color:#166534;padding:2px 10px;border-radius:6px;font-weight:700;">合计 <span id="mat-total-wt" style="font-weight:700;">0.000</span> 吨</span>
+      &nbsp;|&nbsp;
+      合计金额 <span id="mat-total-amt" style="font-weight:700;color:#c2410c;">0</span> 元
+    </div>
+
+    <!-- 原材料预估（按成材率反推） -->
+    <div class="tip-box" style="background:#f0fdf4;border-color:#86efac;color:#166534;margin-top:6px;">
+      🔮 <strong>原材料预估（考虑成材率损耗）：</strong>
+      <span style="display:inline-block;background:#dbeafe;border:1px solid #93c5fd;color:#1d4ed8;padding:2px 10px;border-radius:6px;font-weight:700;">预估基材 <span id="mat-est-base-wt" style="font-weight:700;">0.000</span> 吨</span>
+      &nbsp;+&nbsp;
+      <span style="display:inline-block;background:#fce7f3;border:1px solid #f9a8d4;color:#be185d;padding:2px 10px;border-radius:6px;font-weight:700;">预估复材 <span id="mat-est-clad-wt" style="font-weight:700;">0.000</span> 吨</span>
+      &nbsp;=&nbsp;
+      <span style="display:inline-block;background:#f0fdf4;border:1px solid #86efac;color:#166534;padding:2px 10px;border-radius:6px;font-weight:700;">合计 <span id="mat-est-total-wt" style="font-weight:700;">0.000</span> 吨</span>
+      &nbsp;|&nbsp;
+      预估金额 <span id="mat-est-total-amt" style="font-weight:700;color:#c2410c;">0</span> 元
+      <span style="font-size:0.68rem;color:#6b7280;margin-left:8px;">（= 成品重量 ÷ 成材率）</span>
+    </div>
+
+    <!-- 单价值设置（用于汇总金额计算） -->
+    <div class="row" style="margin-top:8px;">
+      <div class="field">
+        <label>基材单价（元/吨）</label>
+        <input type="number" id="base-price-ref" value="4000" min="0" step="1" oninput="updateMatSpecTotals()">
+      </div>
+      <div class="field">
+        <label>复材单价（元/吨）</label>
+        <input type="number" id="clad-price-ref" value="14860" min="0" step="1" oninput="updateMatSpecTotals()">
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="section-title" style="color:#6b7280; border-color:#9ca3af;">废钢回收（冲减成本）</div>
+    <div class="row">
+      <div class="field">
+        <label>废钢产出量（吨，取区间下限）</label>
+        <input type="number" id="scrap-qty" class="auto" readonly style="background:#fef3c7;border-color:#fcd34d;color:#92400e;font-weight:700;">
+        <div class="density-hint" style="color:#92400e;">= (组坯−成品)×85%</div>
+      </div>
+      <div class="field">
+        <label>废钢单价（元/吨）</label>
+        <input type="number" id="scrap-price" value="2400" min="0" step="1" oninput="calc()">
+      </div>
+      <div class="field">
+        <label>回收金额（元）</label>
+        <input type="number" id="scrap-amount" readonly class="auto" style="background:#f3f4f6;">
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- 4. 爆炸费（按面积·旌德弘力） -->
+<div class="card">
+  <div class="card-header orange">💥 爆炸加工费预估（按面积计价 · 旌德弘力）</div>
+  <div class="card-body">
+    <div class="tip-box">💡 <strong>弘力按面积(㎡)计费：</strong>爆炸费 = <strong>实际有效面积</strong> × <strong>单价</strong> × <strong>综合系数</strong>。填写板规格，系统自动计算面积与各项修正系数。</div>
+
+    <div class="blast-panel">
+
+      <!-- 第1步：板规格与面积 -->
+      <div class="blast-step">
+        <div class="blast-step-head">
+          <div class="step-num done" id="step1-num">1</div>
+          <div class="step-title">板规格与数量（计算面积）</div>
+          <div class="step-res" id="step1-res"></div>
+        </div>
+
+        <!-- 复层厚度（共用） -->
+        <div class="row" style="margin-bottom:6px;">
+          <div class="field" style="flex:0 0 200px;">
+            <label>复层厚度（mm）</label>
+            <input type="number" id="b-clad-thick" value="3" min="0.5" step="0.5" oninput="onBlastInput()">
+          </div>
+        </div>
+
+        <!-- 规格列表 -->
+        <div id="blast-spec-list">
+          <!-- 由JS动态生成 -->
+        </div>
+
+        <!-- 添加规格按钮 -->
+        <div style="margin:6px 0;">
+          <button onclick="addBlastSpecRow()" style="background:#ea580c;color:white;border:none;padding:6px 16px;border-radius:8px;cursor:pointer;font-size:0.82rem;font-weight:600;font-family:inherit;">
+            ➕ 添加规格
+          </button>
+        </div>
+
+        <!-- 汇总 -->
+        <div class="tip-box" style="background:#fff7ed;border-color:#fed7aa;color:#9a3412;margin-top:4px;">
+          📐 <strong>面积汇总：</strong>
+          合计 <span id="blast-total-count" style="font-weight:700;color:#c2410c;">0</span> 块
+          &nbsp;|&nbsp;
+          总面积 <span id="blast-total-area" style="font-weight:700;color:#c2410c;">0.000</span> ㎡
+          &nbsp;|&nbsp;
+          计费面积 <span id="blast-min-area" style="font-weight:700;color:#c2410c;">0.000</span> ㎡（&lt;1㎡/块按1㎡算）
+        </div>
+
+        <div class="blast-note">💡 弘力规则：单块 &lt;1㎡ 按 1㎡ 计费 | 小板（&lt;6㎡）+15%~30% | 大板（≥20㎡、宽≥3m）+30%~70%</div>
+      </div>
+
+      <!-- 第2步：材料组合 -->
+      <div class="blast-step">
+        <div class="blast-step-head">
+          <div class="step-num" id="step2-num">2</div>
+          <div class="step-title">材料组合（确定基准单价）</div>
+          <div class="step-res" id="step2-res"></div>
+        </div>
+        <div class="btn-group">
+          <div class="d-btn active" onclick="selDiff(this,'ss',120,'不锈钢/碳钢 100~150元/㎡')" data-type="ss">
+            🔵 不锈钢/钢 <small style="font-size:0.65rem;opacity:0.85">304+Q345R · B2</small>
+          </div>
+          <div class="d-btn" onclick="selDiff(this,'ss316',130,'316L/碳钢 100~150元/㎡')" data-type="ss316">
+            🔵 316L/钢 <small style="font-size:0.65rem;opacity:0.85">316L+Q345R · B2</small>
+          </div>
+          <div class="d-btn" onclick="selDiff(this,'ti',330,'TA2+Q345R 280~380元/㎡')" data-type="ti">
+            🔴 钛/钢 <small style="font-size:0.65rem;opacity:0.85">TA2+碳钢 · B2</small>
+          </div>
+          <div class="d-btn" onclick="selDiff(this,'ni',420,'Ni201+钢 350~480元/㎡')" data-type="ni">
+            🟡 镍/钢 <small style="font-size:0.65rem;opacity:0.85">Ni201/200+钢 · B2</small>
+          </div>
+          <div class="d-btn" onclick="selDiff(this,'ni625',550,'Inconel625+SA516 询价确认')" data-type="ni625">
+            🟠 镍基合金 <small style="font-size:0.65rem;opacity:0.85">Inconel625 · 询价</small>
+          </div>
+          <div class="d-btn" onclick="selDiff(this,'zr',650,'锆/钢 500~800元/㎡起')" data-type="zr">
+            🔴 锆/钢 <small style="font-size:0.65rem;opacity:0.85">锆R60702 · 询价确认</small>
+          </div>
+        </div>
+        <div style="font-size:0.72rem;color:var(--muted);margin-top:5px;" id="diff-hint">
+          📌 当前选择：不锈钢/碳钢（B2级），基准单价约 <strong style="color:var(--blast-orange)">120 元/㎡</strong>（旌德弘力参考价）
+        </div>
+      </div>
+
+      <!-- 第3步：质量等级 -->
+      <div class="blast-step">
+        <div class="blast-step-head">
+          <div class="step-num" id="step3-num">3</div>
+          <div class="step-title">质量等级（结合率要求）</div>
+          <div class="step-res" id="step3-res"></div>
+        </div>
+        <div class="btn-group">
+          <div class="g-btn" onclick="selGrade(this,1.0,'B2','仅防腐，基准价')" data-g="B2">
+            B2 <small>仅防腐·基准</small>
+          </div>
+          <div class="g-btn active" onclick="selGrade(this,1.2,'B1','承压用途，+15%~30%')" data-g="B1">
+            B1 <small>承压用途·+20%</small>
+          </div>
+          <div class="g-btn" onclick="selGrade(this,1.5,'B0','100%结合，+50%~100%')" data-g="B0">
+            B0 <small>100%结合·+50%</small>
+          </div>
+        </div>
+      </div>
+
+      <!-- 第4步：工艺 -->
+      <div class="blast-step">
+        <div class="blast-step-head">
+          <div class="step-num" id="step4-num">4</div>
+          <div class="step-title">工艺类型</div>
+          <div class="step-res" id="step4-res"></div>
+        </div>
+        <div class="btn-group">
+          <div class="p-btn active" onclick="selProc(this,1.0,'B','仅爆炸（基准）')" data-p="B">
+            🔧 仅爆炸（B）
+          </div>
+          <div class="p-btn" onclick="selProc(this,1.5,'BR','爆炸+轧制，+30%~80%')" data-p="BR">
+            🔧 爆炸+轧制（BR）+50%
+          </div>
+        </div>
+      </div>
+
+      <!-- 第5步：规格修正 -->
+      <div class="blast-step">
+        <div class="blast-step-head">
+          <div class="step-num" id="step5-num">5</div>
+          <div class="step-title">规格修正系数（自动判断 · 可手动调整）</div>
+          <div class="step-res" id="step5-res"></div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label>小板/窄板修正</label>
+            <input type="number" id="c-small" class="auto" value="1.0" min="0.7" max="1.5" step="0.05" oninput="calcBlast()">
+            <div style="font-size:0.64rem;color:var(--muted);margin-top:2px;">&lt;6㎡ 或 &lt;1.5m宽：+15%~30%</div>
+          </div>
+          <div class="field">
+            <label>大板/宽板修正</label>
+            <input type="number" id="c-wide" class="auto" value="1.0" min="1" max="1.8" step="0.05" oninput="calcBlast()">
+            <div style="font-size:0.64rem;color:var(--muted);margin-top:2px;">≥20㎡ 或 ≥3m宽：+30%~70%</div>
+          </div>
+          <div class="field">
+            <label>大批量折扣</label>
+            <input type="number" id="c-batch" class="auto" value="1.0" min="0.8" max="1.0" step="0.05" oninput="calcBlast()">
+            <div style="font-size:0.64rem;color:var(--muted);margin-top:2px;">≥500㎡ 下浮10%~20%</div>
+          </div>
+          <div class="field">
+            <label>厚复层修正</label>
+            <input type="number" id="c-thick" class="auto" value="1.0" min="1" max="1.5" step="0.05" oninput="calcBlast()">
+            <div style="font-size:0.64rem;color:var(--muted);margin-top:2px;">≥6~8mm复层：+20%~40%</div>
+          </div>
+        </div>
+        <div style="font-size:0.72rem;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:5px 9px;margin-top:5px;">
+          🔍 修正依据自动判断：<span id="auto-rules"></span>
+        </div>
+        <div class="blast-note">⚠️ 以上系数根据板规格自动预填，可手动微调后再计算。</div>
+      </div>
+
+      <!-- 第6步：最终结果 -->
+      <div class="blast-step" style="background:#fff7ed; border-color:#fb923c;">
+        <div class="blast-step-head">
+          <div class="step-num" id="step6-num">6</div>
+          <div class="step-title">爆炸费计算结果</div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label>基准单价（元/㎡）</label>
+            <input type="number" id="b-base-price" value="120" min="0" step="1" oninput="calcBlast()">
+          </div>
+          <div class="field">
+            <label>综合系数</label>
+            <input type="number" id="b-mod-coef" class="auto" readonly>
+          </div>
+          <div class="field">
+            <label>折合单价（元/㎡）</label>
+            <input type="number" id="b-unit-price" class="auto" style="background:#fff3e0;color:#c2410c;" readonly>
+          </div>
+        </div>
+        <div class="coef-tags" id="coef-tags"></div>
+        <div class="blast-res">
+          <div class="blast-res-row hi">
+            <span class="lb">💥 <b>爆炸加工费合计</b></span>
+            <span class="vl big" id="res-blast-total">— 元</span>
+          </div>
+          <div class="blast-res-row">
+            <span class="lb">计费面积（㎡）</span>
+            <span class="vl" id="res-blast-area">— ㎡</span>
+          </div>
+          <div class="blast-res-row">
+            <span class="lb">折合吨成本（按产成品量）</span>
+            <span class="vl" id="res-blast-perton-prod">— 元/吨</span>
+          </div>
+          <div class="blast-res-row">
+            <span class="lb">折合吨成本（按组坯量）</span>
+            <span class="vl" id="res-blast-perton-billet">— 元/吨</span>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- end blast-panel -->
+
+    <!-- 弘力询价清单 -->
+    <div class="section-title purple" style="border-color:#7c3aed;color:#7c3aed;">📋 弘力询价清单（可直接发给弘力）</div>
+    <div class="quote-box">
+      <div class="q-title">📨 发送给安徽弘力金属复合的询价信息：</div>
+      <div class="q-item"><span class="q-label">1. 材料组合</span><span class="q-val" id="q-mat">304 + Q345R</span></div>
+      <div class="q-item"><span class="q-label">2. 厚度</span><span class="q-val" id="q-thick">3mm（复层）+ 20mm（基层）</span></div>
+      <div class="q-item"><span class="q-label">3. 单块尺寸</span><span class="q-val" id="q-size">6000×2000mm</span></div>
+      <div class="q-item"><span class="q-label">4. 总面积</span><span class="q-val" id="q-area">12 ㎡</span></div>
+      <div class="q-item"><span class="q-label">5. 质量等级</span><span class="q-val" id="q-grade">B2级</span></div>
+      <div class="q-item"><span class="q-label">6. 工艺</span><span class="q-val" id="q-proc">仅爆炸（B）</span></div>
+      <div class="q-item"><span class="q-label">7. 特殊要求</span><span class="q-val" id="q-extra">—</span></div>
+      <div class="q-item"><span class="q-label">8. 预计数量</span><span class="q-val" id="q-count">1 块</span></div>
+      <button class="quote-copy" onclick="copyQuote()">📋 复制询价清单</button>
+    </div>
+
+    <!-- 爆炸倒转费 -->
+    <div class="section-title orange" style="margin-top:12px;">🚚 爆炸倒转费（旌德发运到厂）</div>
+    <div class="ret-row">
+      <span>倒转费单价：</span>
+      <input type="number" id="ret-price" value="180" min="0" step="1" oninput="calc()" style="width:90px;">
+      <span>元/吨（按组坯量）</span>
+      <span style="margin-left:12px;">倒转费合计：</span>
+      <input type="number" id="ret-total" class="auto" style="width:120px;background:#fff3e0;color:#c2410c;" readonly>
+    </div>
+    <div class="blast-note">💡 倒转费 = 场地操作费 + 短途运输。旌德地区参考约 <strong>150~200 元/吨</strong>（按组坯量）。</div>
+
+  </div>
+</div>
+
+<!-- 5. 其他工序费用 -->
+<div class="card">
+  <div class="card-header purple">🔧 其他工序费用（前道/后道/包装）</div>
+  <div class="card-body">
+    <div class="tip-box">📌 前道/后道/包装费用按<strong>产成品量（吨）</strong>分配。切换"手动模式"可直接填入NC系统导出的本月实际费用值。</div>
+
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="mode-auto" onclick="setFeeMode('auto')">
+        🤖 自动估算（历史均值）
+        <span class="hint">前道756 + 后道656 + 包装603 元/吨</span>
+      </button>
+      <button class="mode-btn" id="mode-manual" onclick="setFeeMode('manual')">
+        ✏️ 手动输入（NC实际值）
+        <span class="hint">直接填本月各工序实际费用</span>
+      </button>
+    </div>
+
+    <div class="section-title">📊 历史工序吨成本参考（爆炸订单式核算2604）</div>
+    <table class="ref-table">
+      <tr><th>月份</th><th>前道</th><th>爆炸(按面积)</th><th>倒转</th><th>后道</th><th>包装</th><th>吨成本合计</th></tr>
+      <tr><td>2月</td><td>561</td><td>1,322</td><td>175</td><td>431</td><td>414</td><td>15,747</td></tr>
+      <tr><td>3月</td><td>950</td><td>2,365</td><td>360</td><td>881</td><td>792</td><td>28,192</td></tr>
+      <tr style="background:#e0f2fe;"><td>均值</td><td>756</td><td>1,844</td><td>268</td><td>756</td><td>603</td><td style="color:#b91c1c;font-weight:700;">21,970</td></tr>
+    </table>
+
+    <div class="fee-section front">
+      <div class="fh">🔩 前道制造费用（组坯/表面处理工序）</div>
+      <div class="row">
+        <div class="field"><label>吨费率（元/吨）</label><input type="number" id="fee-front-unit" class="auto" value="756" step="1" oninput="calc()"></div>
+        <div class="field"><label>合计（元）</label><input type="number" id="fee-front-total" class="auto" readonly></div>
+        <div class="field manual-only"><label>本月实际值（元）</label><input type="number" id="fee-front-manual" value="0" min="0" step="1" oninput="calc()"></div>
+      </div>
+    </div>
+
+    <div class="fee-section back">
+      <div class="fh">✂️ 后道制造费用（切边/校平/热处理/探伤）</div>
+      <div class="row">
+        <div class="field"><label>吨费率（元/吨）</label><input type="number" id="fee-back-unit" class="auto" value="656" step="1" oninput="calc()"></div>
+        <div class="field"><label>合计（元）</label><input type="number" id="fee-back-total" class="auto" readonly></div>
+        <div class="field manual-only"><label>本月实际值（元）</label><input type="number" id="fee-back-manual" value="0" min="0" step="1" oninput="calc()"></div>
+      </div>
+    </div>
+
+    <div class="fee-section pkg">
+      <div class="fh">📦 包装入库费用</div>
+      <div class="row">
+        <div class="field"><label>吨费率（元/吨）</label><input type="number" id="fee-pkg-unit" class="auto" value="603" step="1" oninput="calc()"></div>
+        <div class="field"><label>合计（元）</label><input type="number" id="fee-pkg-total" class="auto" readonly></div>
+        <div class="field manual-only"><label>本月实际值（元）</label><input type="number" id="fee-pkg-manual" value="0" min="0" step="1" oninput="calc()"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- 6. 合同与利润 -->
+<div class="card">
+  <div class="card-header green">💵 合同与利润预估</div>
+  <div class="card-body">
+    <div class="row">
+      <div class="field">
+        <label>合同总金额（含税，元）</label>
+        <input type="number" id="contract-amount" value="900000" min="0" step="1" oninput="calc()">
+      </div>
+      <div class="field">
+        <label>不含税金额（元）</label>
+        <input type="number" id="contract-no-tax" class="auto" readonly>
+      </div>
+    </div>
+    <div class="tax-note">⚠️ 税率13%（一般纳税人）。不含税金额 = 合同金额 ÷ 1.13</div>
+    <div class="row" style="margin-top:9px;">
+      <div class="field">
+        <label>销售单价（含税，元/吨）</label>
+        <input type="number" id="unit-price-tax" value="50000" min="0" step="1" oninput="onUnitPriceChange()">
+      </div>
+      <div class="field">
+        <label>单价（不含税，元/吨）</label>
+        <input type="number" id="unit-price-no-tax" class="auto" readonly>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 7. 成本结果 -->
+<div class="card">
+  <div class="card-header green">📊 成本预估结果</div>
+  <div class="card-body">
+    <div class="result-card">
+
+      <div class="result-row" style="font-size:0.82rem;color:var(--muted);border:none;margin-bottom:4px;">💡 成本构成明细</div>
+      <div class="result-row"><span class="lb">① 基材成本</span><span class="vl" id="r-base">36,000 元</span></div>
+      <div class="result-row"><span class="lb">② 复材成本</span><span class="vl" id="r-clad">14,860 元</span></div>
+      <div class="result-row"><span class="lb">③ 前道制造费</span><span class="vl" id="r-front">7,560 元</span></div>
+      <div class="result-row blast"><span class="lb">④ 爆炸加工费（按面积）</span><span class="vl blast" id="r-blast">— 元</span></div>
+      <div class="result-row"><span class="lb">⑤ 爆炸倒转费</span><span class="vl" id="r-ret">2,160 元</span></div>
+      <div class="result-row"><span class="lb">⑥ 后道制造费</span><span class="vl" id="r-back">6,560 元</span></div>
+      <div class="result-row"><span class="lb">⑦ 包装制造费</span><span class="vl" id="r-pkg">6,030 元</span></div>
+      <div class="result-row red"><span class="lb">⑧ 废钢回收冲减</span><span class="vl red" id="r-scrap">-7,200 元</span></div>
+
+      <div class="divider"></div>
+
+      <div class="result-row hi"><span class="lb">📦 产成品量</span><span class="vl" id="r-prod-qty">10.000 吨</span></div>
+      <div class="result-row hi"><span class="lb">🏗️ 组合坯量</span><span class="vl" id="r-billet-qty">12.000 吨</span></div>
+      <div class="result-row hi" style="background:#fff7ed;"><span class="lb">💥 <b>爆炸费合计（按面积）</b></span><span class="vl blast" id="r-blast2" style="font-size:1.1rem;">— 元</span></div>
+      <div class="result-row hi"><span class="lb">💰 <b>总成本</b></span><span class="vl red" id="r-total" style="font-size:1.1rem;">— 元</span></div>
+      <div class="result-row hi"><span class="lb">⚖️ <b>吨成本</b></span><span class="vl red" id="r-unit-cost">— 元/吨</span></div>
+
+      <div class="divider"></div>
+
+      <div class="result-row hi"><span class="lb">📋 不含税收入</span><span class="vl blue" id="r-revenue">582,524 元</span></div>
+      <div class="result-row hi"><span class="lb">🎯 <b>毛利润</b></span><span class="vl green" id="r-profit" style="font-size:1.05rem;">— 元</span></div>
+      <div class="result-row hi"><span class="lb">📈 <b>吨利润</b></span><span class="vl green" id="r-profit-unit">— 元/吨</span></div>
+      <div class="result-row hi"><span class="lb">📊 <b>毛利率</b></span><span class="vl green" id="r-margin">—%</span></div>
+
+      <div class="profit-bar-wrap" id="profit-bar-wrap">
+        <div class="profit-bar-cost" id="pbar-cost" style="width:20%"></div>
+        <div class="profit-bar-profit" id="pbar-profit" style="width:80%"></div>
+        <div class="profit-bar-label" id="pbar-label">成本 20% | 利润 80%</div>
+      </div>
+
+      <div class="result-row hi"><span class="lb">💰 含税总收入</span><span class="vl blue" id="r-revenue-tax">600,000 元</span></div>
+      <div class="result-row hi"><span class="lb">🏆 含税总利润</span><span class="vl green" id="r-profit-tax">— 元</span></div>
+    </div>
+
+    <div class="section-title" style="margin-top:14px;">📈 成本结构占比</div>
+    <div class="cost-bar-wrap" id="cost-bar-wrap"></div>
+
+    <button class="print-btn" onclick="window.print()">🖨️ 打印 / 导出本页</button>
+  </div>
+</div>
+
+</div><!-- end container -->
+
+<!-- Tesseract.js OCR -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<!-- SheetJS for Excel reading -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<script>
+// ======================================================
+// 密度表（来源：/Users/zheyidu/Desktop/密度.xlsx）
+// ======================================================
+const DENSITY = {
+  // 不锈钢
+  '304':        7.93, 'S30408': 7.93, '06Cr19Ni10': 7.93, '0Cr18Ni9': 7.93,
+  '304L':       7.93, '022Cr19Ni10': 7.93, 'S30403': 7.93,
+  '316':        7.98, '0Cr17Ni12Mo2': 7.98,
+  '316L':       7.98, '022Cr17Ni12Mo2': 7.98, 'S31603': 7.98,
+  '321':        7.93, '0Cr18Ni10Ti': 7.93,
+  // 双相不锈钢
+  '2205':       7.80, '022Cr22Ni5Mo3N': 7.80,
+  '2507':       7.80, '022Cr25Ni7Mo4N': 7.80,
+  // 碳钢/低合金钢
+  'Q235':       7.85, 'Q235B': 7.85, 'Q235A': 7.85,
+  'Q345':       7.85, 'Q345R': 7.85, 'Q345B': 7.85, 'Q345A': 7.85, '16MnR': 7.85,
+  'Q355':       7.85, 'Q355B': 7.85,
+  'SA516':      7.85, 'SA516Gr70': 7.85,
+  '20':         7.85, '20R': 7.85, '20g': 7.85,
+  '15CrMoR':    7.85, '14Cr1MoR': 7.85,
+  '12Cr2Mo1R':  7.85,
+  // 钛及钛合金
+  'TA1':        4.51, 'TA2': 4.51, 'TA3': 4.51, 'TA9': 4.51, 'TA10': 4.51,
+  'TA0':        4.51, 'TC4': 4.45,
+  // 镍及镍合金
+  'Ni200':      8.89, 'Ni201': 8.89, 'N02201': 8.89, 'N02200': 8.89,
+  'Inconel600': 8.47, 'Inconel625': 8.44, 'Inconel800': 7.94,
+  'Monel400':   8.83,
+  // 锆
+  '锆R60702':   6.51, 'R60702': 6.51, '锆702': 6.51, 'Zr702': 6.51,
+  // 铜
+  'T2':         8.96, 'H62': 8.43, 'B30': 8.9,
+  // 铝
+  '1060':       2.71, '5052': 2.68, '6061': 2.70,
+  // 其他
+  '15CrMo':     7.85, '12Cr1MoV': 7.85,
+  '347H':       7.93,
+  '310S':       7.98,
+};
+
+// 密度表（反向：钢种别名）
+const DENSITY_ALIAS = {
+  '304不锈钢': 7.93, '316L不锈钢': 7.98,
+  '碳钢': 7.85, '容器板': 7.85,
+  '纯镍': 8.89, '镍板': 8.89,
+  '钛板': 4.51, '锆板': 6.51,
+};
+
+function getDensity(key) {
+  if (!key) return null;
+  key = key.trim();
+  if (DENSITY[key]) return DENSITY[key];
+  if (DENSITY_ALIAS[key]) return DENSITY_ALIAS[key];
+  // 模糊匹配
+  for (const k of Object.keys(DENSITY)) {
+    if (key.includes(k) || k.includes(key)) return DENSITY[k];
+  }
+  return null;
+}
+
+// ======================================================
+// 实时价格数据（2026年4月行情）
+// ======================================================
+const PRICES = {
+  'q345r':     { name:'Q345R容器板',   type:'碳钢基材',    price:4000,   range:'3,420~4,180',    source:'Mysteel 2026-04-22' },
+  'q355':      { name:'Q355低合金板',   type:'碳钢基材',    price:4200,   range:'3,800~4,600',    source:'市场参考' },
+  'sa516':     { name:'SA516Gr70N',    type:'美标容器板',   price:4800,   range:'4,300~5,200',    source:'进口参考' },
+  'ss304':     { name:'SUS304不锈钢',  type:'不锈钢',       price:14860,  range:'14,300~15,500',  source:'Mysteel 2026-04-22' },
+  'ss316l':    { name:'SUS316L不锈钢', type:'不锈钢',       price:27500,  range:'27,000~28,700', source:'Mysteel 2026-04-22' },
+  'ta2':       { name:'TA2钛板',        type:'钛材',         price:110000, range:'105~120元/公斤',  source:'北方有色 2026-04' },
+  'ni201':     { name:'Ni201/Ni200',    type:'纯镍板',       price:180000, range:'170,000~195,000',source:'市场询价' },
+  'inconel625':{name:'Inconel625',     type:'镍基合金',     price:500000, range:'询价确认',         source:'市场参考' },
+  'zircon':    { name:'锆R60702',       type:'锆材',         price:900000, range:'询价确认',         source:'市场参考' },
+  'scrap':     { name:'废钢（统料）',   type:'回收',         price:2400,   range:'2,300~2,500',    source:'市场均值' },
+};
+
+// ======================================================
+// 爆炸基准单价（旌德弘力 2026年本地价）
+// ======================================================
+const BLAST_BASE = {
+  ss:    { base:120,  desc:'304+Q345R B2',    hint:'不锈钢/碳钢 B2级 100~150元/㎡' },
+  ss316: { base:130,  desc:'316L+Q345R B2',   hint:'316L/碳钢 B2级 100~150元/㎡' },
+  ti:    { base:330,  desc:'TA2+Q345R B2',    hint:'钛/钢 B2级 280~380元/㎡' },
+  ni:    { base:420,  desc:'Ni201+碳钢 B2',   hint:'镍/钢 B2级 350~480元/㎡' },
+  ni625: { base:550,  desc:'Inconel625+SA516',hint:'镍基合金，请询价确认' },
+  zr:    { base:650,  desc:'锆R60702+钢',      hint:'锆/钢 500~800元/㎡起' },
+};
+
+const CLAD_BLAST_MAP = {
+  ss304:'ss', ss316l:'ss316', ta2:'ti',
+  ni201:'ni', inconel625:'ni625', zircon:'zr',
+};
+
+// ======================================================
+// 爆炸向导状态
+// ======================================================
+const BS = {
+  singleArea:0, totalArea:0, billableArea:0,
+  length:6000, width:2000, count:1, cladThick:3,
+  diffType:'ss', diffBase:120, gradeCoef:1.2, gradeName:'B1',
+  procCoef:1.0, procName:'B',
+  cSmall:1.0, cWide:1.0, cBatch:1.0, cThick:1.0,
+};
+
+let feeMode = 'auto';
+let inputMode = 'file';
+let uploadType = 'image';
+let extractedData = {};
+let tesseractWorker = null;
+
+// ======================================================
+// 模式切换
+// ======================================================
+function setInputMode(mode) {
+  inputMode = mode;
+  document.getElementById('mode-file').classList.toggle('active', mode === 'file');
+  document.getElementById('mode-manual').classList.toggle('active', mode === 'manual');
+  document.getElementById('file-section').style.display = mode === 'file' ? '' : 'none';
+  document.getElementById('manual-section').style.display = mode === 'manual' ? '' : 'none';
+}
+
+function setUploadType(type) {
+  uploadType = type;
+  document.querySelectorAll('.upload-tab').forEach(t => t.classList.remove('active'));
+  const icon = document.getElementById('tab-' + type);
+  if (icon) icon.classList.add('active');
+  const finput = document.getElementById('file-input');
+  if (type === 'excel') finput.accept = '.xlsx,.xls';
+  else if (type === 'pdf') finput.accept = '.pdf';
+  else finput.accept = '.jpg,.jpeg,.png,.gif,.webp';
+}
+
+// ======================================================
+// 拖拽支持
+// ======================================================
+const uploadZone = document.getElementById('upload-zone');
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('dragover');
+  const f = e.dataTransfer.files[0];
+  if (f) handleFile(f);
+});
+
+// ======================================================
+// 文件处理
+// ======================================================
+async function handleFile(file) {
+  if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+
+  showOcrStatus('running', '⏳ 正在处理文件：' + file.name);
+  document.getElementById('ocr-progress-bar').style.width = '20%';
+  document.getElementById('extract-preview').classList.remove('show');
+
+  try {
+    if (ext === 'xlsx' || ext === 'xls') {
+      await processExcel(file);
+    } else {
+      await processImageOCR(file);
+    }
+  } catch(err) {
+    showOcrStatus('error', '❌ 处理失败：' + err.message);
+  }
+}
+
+// ======================================================
+// Excel 处理
+// ======================================================
+async function processExcel(file) {
+  document.getElementById('ocr-progress-bar').style.width = '40%';
+  showOcrStatus('running', '📊 正在解析 Excel 文件...');
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+        const allData = {};
+
+        wb.SheetNames.forEach(sname => {
+          const ws = wb.Sheets[sname];
+          const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+          allData[sname] = data;
+        });
+
+        document.getElementById('ocr-progress-bar').style.width = '70%';
+        showOcrStatus('running', '🔍 正在提取数据...');
+
+        const extracted = extractFromExcelData(allData);
+        extractedData = extracted;
+
+        document.getElementById('ocr-progress-bar').style.width = '100%';
+        showOcrStatus('done', '✅ Excel 解析完成！识别到以下数据：');
+
+        const textLog = wb.SheetNames.map(s =>
+          `【${s}】\n` + (allData[s].slice(0,10).map(r => r.join('\t')).join('\n'))
+        ).join('\n\n');
+        document.getElementById('ocr-text').textContent = textLog;
+        document.getElementById('ocr-text').style.display = 'block';
+
+        renderExtractPreview(extracted);
+        updateStepIndicator(3);
+
+        resolve();
+      } catch(err) {
+        reject(err);
+      }
+    };
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// ======================================================
+// OCR 行业词典（提升识别准确度）
+// ======================================================
+const OCR_STEEL_DICT = {
+  // 材质别名映射（OCR易混淆字符校正）
+  '镏304': '304', '3O4': '304', '3O4L': '304L',
+  '316不诱钢': '316L', '316L不诱钢': '316L',
+  'Q345': 'Q345R', '破钢': 'Q345R', 'Q345R容器板': 'Q345R',
+  '裙型320': '2205', '2205双相': '2205', '2507双相': '2507',
+  'TA1': 'TA2', 'TA2TA2': 'TA2',  // 钛板常误识别
+  'Ni200': 'Ni201', 'NI200': 'Ni201', '纯镍': 'Ni201',
+  '锆R60702': '锆R60702', '锆702': '锆R60702', 'ZR702': '锆R60702',
+  // 厚度单位修正
+  'm m': 'mm', 'ＭＭ': 'MM', 'm*m': 'mm',
+  '厘米': '',  // 错误单位，忽略
+  // 数字/字母混淆（OCR常见错误）
+  'O': '0', 'o': '0',
+  'l': '1', 'I': '1',
+  'S': '5', 's': '5',
+  'B': '8', 'b': '6',
+  'Z': '2', 'z': '2',
+};
+
+function correctOCRText(text) {
+  let corrected = text;
+  for (const [wrong, right] of Object.entries(OCR_STEEL_DICT)) {
+    if (wrong && right) {  // 跳过空值映射（如"厘米"→忽略）
+      corrected = corrected.replace(new RegExp(wrong, 'gi'), right);
+    }
+  }
+  return corrected;
+}
+
+// ======================================================
+// 图像预处理（放大+灰度+对比度 — 提升OCR准确度）
+// ======================================================
+async function preprocessForOCR(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      try {
+        // 放大2倍（手机拍照dpi不够）
+        const scale = 2;
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        const ctx = canvas.getContext('2d');
+        
+        // 高清渲染
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        
+        // 获取像素数据
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        
+        // 灰度处理 + 提高对比度
+        const contrast = 1.4;  // 对比度增强
+        const brightness = 10;  // 亮度微调
+        for (let i = 0; i < data.length; i += 4) {
+          // 转灰度
+          let gray = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
+          // 对比度调整
+          gray = ((gray - 128) * contrast) + 128 + brightness;
+          gray = Math.max(0, Math.min(255, gray));
+          data[i] = data[i+1] = data[i+2] = gray;
+        }
+        ctx.putImageData(imageData, 0, 0);
+        
+        // 二值化（让文字更清晰）
+        const ctx2 = canvas.getContext('2d');
+        const imgData2 = ctx2.getImageData(0, 0, canvas.width, canvas.height);
+        const d2 = imgData2.data;
+        for (let i = 0; i < d2.length; i += 4) {
+          const v = d2[i];  // 灰度值
+          // 自适应阈值二值化
+          d2[i] = d2[i+1] = d2[i+2] = v > 140 ? 255 : 0;
+        }
+        ctx2.putImageData(imgData2, 0, 0);
+        
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL('image/png'));
+      } catch(e) {
+        URL.revokeObjectURL(url);
+        reject(e);
+      }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('图片加载失败')); };
+    img.src = url;
+  });
+}
+
+// ======================================================
+// 图片OCR处理
+// ======================================================
+async function processImageOCR(file) {
+  document.getElementById('ocr-progress-bar').style.width = '15%';
+  showOcrStatus('running', '📷 图像加载中（正在预处理）...');
+
+  // 步骤1：图像预处理（放大+灰度+二值化）
+  showOcrStatus('running', '🔧 图像预处理中（放大2x + 增强对比度）...');
+  let processedImage;
+  try {
+    processedImage = await preprocessForOCR(file);
+    document.getElementById('ocr-progress-bar').style.width = '30%';
+  } catch(e) {
+    console.warn('预处理失败，使用原图：', e);
+    processedImage = file;  // 降级：使用原图
+  }
+
+  showOcrStatus('running', '🔍 正在识别文字（OCR），请稍候...');
+
+  // 步骤2：Tesseract识别（使用chi_sim+eng混合语言包）
+  const result = await Tesseract.recognize(processedImage, 'chi_sim+eng', {
+    logger: m => {
+      if (m.status === 'recognizing text') {
+        const pct = 30 + Math.round(m.progress * 60);
+        document.getElementById('ocr-progress-bar').style.width = pct + '%';
+      }
+    }
+  });
+
+  document.getElementById('ocr-progress-bar').style.width = '90%';
+  
+  // 步骤3：行业词典校正
+  let rawText = result.data.text;
+  let correctedText = correctOCRText(rawText);
+  
+  // 步骤4：置信度分析
+  const words = result.data.words || [];
+  const lowConfidenceWords = words.filter(w => w.confidence < 60).map(w => w.text);
+  
+  document.getElementById('ocr-text').textContent = correctedText;
+  document.getElementById('ocr-text').style.display = 'block';
+
+  const extracted = extractFromOCRText(correctedText, lowConfidenceWords);
+  extractedData = extracted;
+
+  document.getElementById('ocr-progress-bar').style.width = '100%';
+  if (extracted.fields.length > 0) {
+    // 标注低置信度字段
+    extracted.fields = extracted.fields.map(f => ({
+      ...f,
+      confidence: f.confidence || 100,
+      lowConfidence: lowConfidenceWords.length > 0 && !f.confirmed
+    }));
+    
+    showOcrStatus('done', '✅ OCR 识别完成！请核对提取的数据（低置信度字段已标黄）：');
+    renderExtractPreview(extracted);
+    updateStepIndicator(3);
+  } else {
+    showOcrStatus('error', '⚠️ 未识别到明确的订单信息，请切换「手动输入」模式直接填写。');
+  }
+}
+
+// ======================================================
+// OCR文本提取（支持置信度分析）
+// ======================================================
+function extractFromOCRText(text, lowConfidenceWords = []) {
+  const lines = text.split(/\n/).map(l => l.trim()).filter(Boolean);
+  const fields = [];
+  const raw = [];
+
+  // 1. 钢种识别（复层/基材）- 增强版正则
+  const cladPatterns = [
+    /S?SUS?(\d+[A-Z]?)/i, /304[A-Z]?/, /316L?/i, /321/, /2205/, /2507/,
+    /TA(\d)/i, /TC4/, /Ni(\d+)/i, /Inconel(\d+)/, /锆[Rr]?60?702/i, /ZR?702/i,
+  ];
+  const basePatterns = [
+    /Q34[5R]/i, /Q23[5AB]/i, /Q355/, /SA516/, /SA[45]80/, /20[Rg]?/,
+    /15CrMoR?/i, /12Cr\d?Mo/i,
+  ];
+  const allSteel = [...new Set(text.match(/[A-Za-z0-9\u4e00-\u9fa5]{2,20}/g) || [])];
+
+  let cladGrade = '', baseGrade = '';
+  for (const l of lines) {
+    // 复层材质
+    if (/复层|覆层|不锈钢|钛板|镍板|锆板/i.test(l)) {
+      const m = l.match(/S?SUS?(\d+[A-Z]?)|TA\d?|TC4|Ni\d+|Inconel\d+|锆[Rr]?60?702|ZR?702|304|316L|316|321|2205|2507/i);
+      if (m && !cladGrade) { cladGrade = m[0].toUpperCase(); }
+    }
+    // 基材材质
+    if (/基材|基层|碳钢|容器板|复合基/i.test(l)) {
+      const m = l.match(/Q34[5R]|Q23[5AB]|Q355|SA516|SA[45]80|20[Rg]?|15CrMoR?|12Cr\d?Mo/i);
+      if (m && !baseGrade) { baseGrade = m[0].toUpperCase(); }
+    }
+  }
+  // 从整体文本找
+  if (!cladGrade) {
+    const m304 = text.match(/304[A-Z]?/i); if (m304) cladGrade = m304[0];
+    else {
+      const mTA = text.match(/TA[1-3]/i); if (mTA) cladGrade = mTA[0].toUpperCase();
+      else {
+        const mNi = text.match(/Ni\s*201|Ni\s*200|Ni201|Ni200|Inconel\s*625/i); if (mNi) cladGrade = mNi[0];
+      }
+    }
+  }
+  if (!baseGrade) {
+    const mQ345 = text.match(/Q34[5R][A-Z]?/i); if (mQ345) baseGrade = mQ345[0].toUpperCase();
+    else {
+      const mSA = text.match(/SA\s*51[56]|SA51[56]/i); if (mSA) baseGrade = mSA[0];
+    }
+  }
+
+  // 2. 厚度（复层+基层）
+  let cladThick = 0, baseThick = 0;
+  const thickMatch = text.match(/(\d+(?:\.\d+)?)\s*[mM][mM]\s*[×x×]\s*(\d+(?:\.\d+)?)\s*[mM][mM]/);
+  if (thickMatch) {
+    cladThick = parseFloat(thickMatch[1]);
+    baseThick = parseFloat(thickMatch[2]);
+  }
+  if (!cladThick) {
+    const ctM = text.match(/复[层覆]?\s*[厚]?\s*[:：]?\s*(\d+(?:\.\d+)?)\s*[mM][mM]/i);
+    if (ctM) cladThick = parseFloat(ctM[1]);
+  }
+  if (!baseThick) {
+    const btM = text.match(/基[层材]?\s*[厚]?\s*[:：]?\s*(\d+(?:\.\d+)?)\s*[mM][mM]/i);
+    if (btM) baseThick = parseFloat(btM[1]);
+  }
+  // 规格写法：3+20 或 3+20mm
+  const specMatch = text.match(/(\d+(?:\.\d+)?)\s*\+\s*(\d+(?:\.\d+)?)/);
+  if (specMatch && !cladThick) {
+    cladThick = parseFloat(specMatch[1]);
+    baseThick = parseFloat(specMatch[2]);
+  }
+
+  // 3. 尺寸（长×宽）
+  let length = 0, width = 0;
+  const dimMatch = text.match(/(\d+)\s*[×xX×*]\s*(\d+)\s*[mM][mM]/);
+  if (dimMatch) {
+    length = parseInt(dimMatch[1]);
+    width = parseInt(dimMatch[2]);
+  }
+  // 顺序写法：长*宽*厚
+  const lwbM = text.match(/(\d{3,6})\s*[×xX×*]\s*(\d{3,6})\s*[×xX×*]/);
+  if (lwbM && !length) {
+    length = parseInt(lwbM[1]);
+    width = parseInt(lwbM[2]);
+  }
+
+  // 4. 重量
+  let prodQty = 0, billetQty = 0;
+  const qtyMatch = text.match(/重量[:：]?\s*(\d+(?:\.\d+)?)\s*[吨T]/i);
+  if (qtyMatch) prodQty = parseFloat(qtyMatch[1]);
+  const prodM = text.match(/成品\s*[量:]?\s*(\d+(?:\.\d+)?)\s*[吨]?/i);
+  if (prodM) prodQty = parseFloat(prodM[1]);
+  const billetM = text.match(/组坯\s*[量:]?\s*(\d+(?:\.\d+)?)\s*[吨]?/i);
+  if (billetM) billetQty = parseFloat(billetM[1]);
+
+  // 5. 数量
+  let count = 1;
+  const cntM = text.match(/数量[:：]?\s*(\d+)\s*(?:块|张|件|片)?/i);
+  if (cntM) count = parseInt(cntM[1]);
+
+  // 6. 质量等级
+  let grade = 'B2';
+  if (/B0|最高|100%/.test(text)) grade = 'B0';
+  else if (/B1|承压|强度/.test(text)) grade = 'B1';
+
+  // 7. 技术要求
+  let techReq = '';
+  const techPatterns = ['探伤', 'UT', 'RT', '热处理', '校平', '切边', 'ASTM', 'ASME'];
+  for (const p of techPatterns) {
+    if (text.includes(p)) techReq += (techReq ? '、' : '') + p;
+  }
+
+  fields.push(
+    { label:'复层材质', value: cladGrade, confirmed: !!cladGrade },
+    { label:'基材材质', value: baseGrade, confirmed: !!baseGrade },
+    { label:'复层厚度', value: cladThick ? cladThick + ' mm' : '', confirmed: !!cladThick },
+    { label:'基层厚度', value: baseThick ? baseThick + ' mm' : '', confirmed: !!baseThick },
+    { label:'单块长度', value: length ? length + ' mm' : '', confirmed: !!length },
+    { label:'单块宽度', value: width ? width + ' mm' : '', confirmed: !!width },
+    { label:'成品重量', value: prodQty ? prodQty.toFixed(3) + ' 吨' : '', confirmed: !!prodQty },
+    { label:'组坯重量', value: billetQty ? billetQty.toFixed(3) + ' 吨' : '', confirmed: !!billetQty },
+    { label:'数量', value: count + ' 块', confirmed: count > 0 },
+    { label:'质量等级', value: grade, confirmed: true },
+    { label:'技术要求', value: techReq || '—', confirmed: !!techReq },
+  );
+
+  return { fields, raw: text };
+}
+
+// ======================================================
+// Excel数据提取
+// ======================================================
+function extractFromExcelData(allData) {
+  const fields = [];
+  let raw = '';
+
+  for (const [sname, rows] of Object.entries(allData)) {
+    raw += `\n【${sname}】\n`;
+    for (const row of rows.slice(0, 50)) {
+      raw += row.join(' | ') + '\n';
+    }
+
+    const str = rows.map(r => r.join(' ')).join('\n');
+
+    // 钢种
+    let cladGrade = '', baseGrade = '';
+    const steelMatch304 = str.match(/304[A-Z]?/i); if (steelMatch304) cladGrade = steelMatch304[0];
+    const steelMatch316 = str.match(/316L?/i); if (steelMatch316) cladGrade = steelMatch316[0];
+    const steelMatchTA = str.match(/TA[1-3]/i); if (steelMatchTA) cladGrade = steelMatchTA[0];
+    const steelMatchNi = str.match(/Ni\s*201|Ni\s*200|Ni201|Ni200/i); if (steelMatchNi) cladGrade = steelMatchNi[0];
+    const steelMatchZr = str.match(/锆\s*R?60?702|R60702|ZR702/i); if (steelMatchZr) cladGrade = steelMatchZr[0];
+    const steelMatchQ345 = str.match(/Q34[5R][A-Z]?/i); if (steelMatchQ345) baseGrade = steelMatchQ345[0];
+    const steelMatchSA = str.match(/SA\s*51[56]/i); if (steelMatchSA) baseGrade = steelMatchSA[0];
+
+    // 厚度
+    let cladThick = 0, baseThick = 0;
+    const thickMatch = str.match(/(\d+(?:\.\d+)?)\s*\+\s*(\d+(?:\.\d+)?)/);
+    if (thickMatch) { cladThick = parseFloat(thickMatch[1]); baseThick = parseFloat(thickMatch[2]); }
+
+    // 尺寸
+    let length = 0, width = 0;
+    const dimMatch = str.match(/(\d{3,6})\s*[×xX]\s*(\d{3,6})\s*[mM][mM]/);
+    if (dimMatch) { length = parseInt(dimMatch[1]); width = parseInt(dimMatch[2]); }
+
+    // 重量
+    let prodQty = 0, billetQty = 0;
+    const qtyNums = str.match(/\d+\.\d{3,}/g) || [];
+    for (const q of qtyNums) {
+      const v = parseFloat(q);
+      if (v > 0.5 && v < 200 && !prodQty) prodQty = v;
+      else if (v > 0.5 && v < 200 && prodQty && !billetQty && v > prodQty) billetQty = v;
+    }
+
+    // 数量
+    let count = 1;
+    const cntM = str.match(/数量[:：]?\s*(\d+)/);
+    if (cntM) count = parseInt(cntM[1]);
+
+    // 质量等级
+    let grade = 'B2';
+    if (/B0/.test(str)) grade = 'B0';
+    else if (/B1/.test(str)) grade = 'B1';
+
+    fields.push(
+      { label:'复层材质', value: cladGrade, confirmed: !!cladGrade },
+      { label:'基材材质', value: baseGrade, confirmed: !!baseGrade },
+      { label:'复层厚度', value: cladThick ? cladThick + ' mm' : '', confirmed: !!cladThick },
+      { label:'基层厚度', value: baseThick ? baseThick + ' mm' : '', confirmed: !!baseThick },
+      { label:'单块长度', value: length ? length + ' mm' : '', confirmed: !!length },
+      { label:'单块宽度', value: width ? width + ' mm' : '', confirmed: !!width },
+      { label:'成品重量', value: prodQty ? prodQty.toFixed(3) + ' 吨' : '', confirmed: !!prodQty },
+      { label:'组坯重量', value: billetQty ? billetQty.toFixed(3) + ' 吨' : '', confirmed: !!billetQty },
+      { label:'数量', value: count + ' 块', confirmed: count > 0 },
+      { label:'质量等级', value: grade, confirmed: true },
+    );
+  }
+
+  return { fields, raw };
+}
+
+// ======================================================
+// 渲染提取预览（支持低置信度标注）
+// ======================================================
+function renderExtractPreview(extracted) {
+  const el = document.getElementById('extract-preview');
+  el.classList.add('show');
+
+  document.getElementById('extract-items').innerHTML = extracted.fields.map(f => {
+    const isLow = f.lowConfidence || (f.confidence < 60 && !f.confirmed);
+    return `
+    <div class="ext-item" style="${isLow ? 'background:#fef3c7;border-radius:6px;padding:5px 8px;' : ''}">
+      <span class="ext-label">${f.label}</span>
+      <span class="ext-value">
+        ${f.value || '—'}
+        ${isLow ? '<span class="unconfirmed">⚠ 置信度低，请核对</span>' : 
+          (f.confirmed ? '<span class="confirmed">✓ 已识别</span>' : '<span class="unconfirmed">⚠ 未识别</span>')}
+      </span>
+    </div>
+  `}).join('');
+}
+
+// ======================================================
+// 确认填入表单
+// ======================================================
+function applyExtracted() {
+  for (const f of extractedData.fields) {
+    if (!f.value && !f.confirmed) continue;
+    const v = f.value.replace(/\s*(mm|吨|㎡|块)\s*$/g, '').trim();
+
+    if (f.label === '复层材质') {
+      const matMap = { '304':'ss304', '304L':'ss304', '316L':'ss316l', 'TA1':'ta2', 'TA2':'ta2', 'TA3':'ta2',
+                       'NI201':'ni201', 'NI200':'ni201', 'NI 201':'ni201', 'INCONEL625':'inconel625',
+                       '锆R60702':'zircon', 'ZR702':'zircon' };
+      const matKey = matMap[v.toUpperCase()] || '';
+      if (matKey) { document.getElementById('clad-mat').value = matKey; onCladChange(); }
+    }
+    if (f.label === '基材材质') {
+      const baseMap = { 'Q345R':'q345r', 'Q345B':'q345r', 'Q345':'q345r', 'Q355':'q355', 'SA516':'sa516' };
+      const baseKey = baseMap[v.toUpperCase()] || '';
+      if (baseKey) { document.getElementById('base-mat').value = baseKey; onBaseChange(); }
+    }
+    if (f.label === '复层厚度') {
+      const n = parseFloat(v);
+      if (n > 0) { document.getElementById('b-clad-thick').value = n; onBlastInput(); }
+    }
+    if (f.label === '基层厚度') {
+      // 基层厚度更新规格显示
+      const ct = document.getElementById('b-clad-thick').value;
+      const spec = document.getElementById('spec');
+      if (ct) spec.value = `?+${v} ${ct}+?mm`;
+    }
+    if (f.label === '单块长度') {
+      const n = parseInt(v);
+      if (n > 0) {
+        const first = document.querySelector('.blast-spec-row');
+        if (first) { first.querySelector('.bs-length').value = n; calcBlastSpecRow(first); }
+      }
+    }
+    if (f.label === '单块宽度') {
+      const n = parseInt(v);
+      if (n > 0) {
+        const first = document.querySelector('.blast-spec-row');
+        if (first) { first.querySelector('.bs-width').value = n; calcBlastSpecRow(first); }
+      }
+    }
+    if (f.label === '成品重量') {
+      const n = parseFloat(v);
+      if (n > 0) { document.getElementById('product-qty').value = n.toFixed(3); onAnyWeightChange('product'); }
+    }
+    if (f.label === '组坯重量') {
+      const n = parseFloat(v);
+      if (n > 0) { document.getElementById('billet-qty').value = n.toFixed(3); onAnyWeightChange('billet'); }
+    }
+    if (f.label === '数量') {
+      const n = parseInt(v);
+      if (n > 0) {
+        const first = document.querySelector('.blast-spec-row');
+        if (first) { first.querySelector('.bs-count').value = n; calcBlastSpecRow(first); }
+      }
+    }
+    if (f.label === '质量等级') {
+      if (v === 'B2') selGrade(document.querySelector('[data-g="B2"]'), 1.0, 'B2', '仅防腐，基准价');
+      else if (v === 'B1') selGrade(document.querySelector('[data-g="B1"]'), 1.2, 'B1', '承压用途');
+      else if (v === 'B0') selGrade(document.querySelector('[data-g="B0"]'), 1.5, 'B0', '100%结合');
+    }
+  }
+
+  // 更新规格文本
+  const ct = document.getElementById('b-clad-thick').value;
+  const cl = document.getElementById('clad-mat');
+  if (cl.value && ct) {
+    const cladNames = { ss304:'304', ss316l:'316L', ta2:'TA2', ni201:'Ni201', inconel625:'Inconel625', zircon:'锆702' };
+    const baseEl = document.getElementById('base-mat');
+    const baseNames = { q345r:'Q345R', q355:'Q355', sa516:'SA516' };
+    document.getElementById('spec').value =
+      `${cladNames[cl.value] || '?'}+${baseNames[baseEl.value] || '?'} ${ct}+?mm`;
+  }
+
+  // 滚动到产品参数区
+  document.getElementById('product-type').scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+  // 提示
+  const btn = document.querySelector('.apply-ext-btn');
+  btn.textContent = '✅ 已填入！';
+  btn.style.background = '#166534';
+  setTimeout(() => {
+    btn.textContent = '✅ 确认填入表单';
+    btn.style.background = '';
+  }, 2500);
+}
+
+// ======================================================
+// OCR状态显示
+// ======================================================
+function showOcrStatus(state, msg) {
+  const el = document.getElementById('ocr-status');
+  el.className = 'ocr-status show ' + state;
+  document.getElementById('ocr-msg').textContent = msg;
+  if (state === 'running') {
+    document.getElementById('ocr-icon').textContent = '⏳';
+    updateStepIndicator(2);
+  } else if (state === 'done') {
+    document.getElementById('ocr-icon').textContent = '✅';
+    document.getElementById('ocr-progress-bar').style.width = '100%';
+  } else if (state === 'error') {
+    document.getElementById('ocr-icon').textContent = '❌';
+    document.getElementById('ocr-progress-bar').style.background = '#ef4444';
+  }
+}
+
+function updateStepIndicator(step) {
+  for (let i = 1; i <= 3; i++) {
+    const el = document.getElementById('si-step' + i);
+    if (el) el.style.fontWeight = i <= step ? '700' : '400';
+    if (el && i <= step) el.style.background = 'rgba(255,255,255,0.3)';
+  }
+}
+
+// ======================================================
+// 爆炸向导函数
+// ======================================================
+function selDiff(el, type, base, hint) {
+  document.querySelectorAll('.d-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  BS.diffType = type; BS.diffBase = base;
+  document.getElementById('b-base-price').value = base;
+  document.getElementById('diff-hint').innerHTML = `📌 当前：<strong>${hint}</strong>（旌德弘力参考价，可手动调整）`;
+  autoCoefs(); calcBlast();
+}
+
+function selGrade(el, coef, name, desc) {
+  document.querySelectorAll('.g-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  BS.gradeCoef = coef; BS.gradeName = name;
+  document.getElementById('step3-res').textContent = name + ' · ' + desc;
+  calcBlast();
+}
+
+function selProc(el, coef, name, desc) {
+  document.querySelectorAll('.p-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  BS.procCoef = coef; BS.procName = name;
+  document.getElementById('step4-res').textContent = name + ' · ' + desc;
+  calcBlast();
+}
+
+function autoCoefs() {
+  const sa = BS.singleArea, ta = BS.totalArea, w = BS.width, ct = BS.cladThick;
+  const rules = [];
+
+  if (sa < 6) {
+    BS.cSmall = 1.15 + Math.max(0, (6 - sa) / 30);
+    rules.push(`小板(${sa.toFixed(1)}㎡ < 6㎡) → 系数 ${BS.cSmall.toFixed(2)}`);
+  } else if (w < 1500) {
+    BS.cSmall = 1.15 + Math.max(0, (1500 - w) / 2500);
+    rules.push(`窄板(${w}mm < 1500mm) → 系数 ${BS.cSmall.toFixed(2)}`);
+  } else {
+    BS.cSmall = 1.0;
+  }
+
+  if (ta >= 20 || w >= 3000) {
+    BS.cWide = 1.3 + (w >= 3000 ? 0.2 : 0) + (ta >= 30 ? 0.15 : 0);
+    BS.cWide = Math.min(BS.cWide, 1.7);
+    rules.push(`大板(${ta >= 20 ? '≥20㎡' : ''}${w >= 3000 ? '宽≥3m' : ''}) → 系数 ${BS.cWide.toFixed(2)}`);
+  } else {
+    BS.cWide = 1.0;
+  }
+
+  if (ta >= 500) {
+    BS.cBatch = 0.80;
+    rules.push(`大批量(≥500㎡) → 折扣 ${BS.cBatch.toFixed(2)}`);
+  } else if (ta >= 50) {
+    BS.cBatch = 0.95;
+    rules.push(`中批量(≥50㎡) → 折扣 ${BS.cBatch.toFixed(2)}`);
+  } else {
+    BS.cBatch = 1.0;
+  }
+
+  if (ct >= 12) {
+    BS.cThick = 1.5; rules.push(`厚复层(${ct}mm ≥ 12mm) → 系数 1.50`);
+  } else if (ct >= 8) {
+    BS.cThick = 1.3; rules.push(`厚复层(${ct}mm ≥ 8mm) → 系数 1.30`);
+  } else if (ct >= 6) {
+    BS.cThick = 1.2; rules.push(`厚复层(${ct}mm ≥ 6mm) → 系数 1.20`);
+  } else {
+    BS.cThick = 1.0;
+  }
+
+  document.getElementById('c-small').value = BS.cSmall.toFixed(2);
+  document.getElementById('c-wide').value = BS.cWide.toFixed(2);
+  document.getElementById('c-batch').value = BS.cBatch.toFixed(2);
+  document.getElementById('c-thick').value = BS.cThick.toFixed(2);
+  document.getElementById('auto-rules').textContent = rules.length ? rules.join(' | ') : '无需修正（常规规格）';
+}
+
+// ======================================================
+// 爆炸规格：多规格行列表
+// ======================================================
+
+let _blastSpecCount = 0;
+
+function addBlastSpecRow(data) {
+  const list = document.getElementById('blast-spec-list');
+  _blastSpecCount++;
+  const idx = _blastSpecCount;
+
+  const row = document.createElement('div');
+  row.className = 'blast-spec-row';
+  row.setAttribute('data-idx', idx);
+  row.style.cssText = 'background:#fff7f0;border:1px solid #fed7aa;border-radius:10px;padding:10px;margin-bottom:6px;';
+
+  row.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <strong style="color:#c2410c;font-size:0.88rem;">💥 规格 #${idx}</strong>
+      <button onclick="delBlastSpecRow(this)" class="del-row-btn" style="background:#ef4444;color:white;border:none;border-radius:6px;padding:3px 10px;font-size:0.75rem;cursor:pointer;display:${idx > 1 ? '' : 'none'};">🗑 删除</button>
+    </div>
+    <div class="row">
+      <div class="field" style="flex:1;min-width:80px;">
+        <label>数量（块）</label>
+        <input type="number" class="bs-count auto" value="${data ? data.count : 1}" min="1" step="1" oninput="calcBlastSpecRow(this.closest('.blast-spec-row'))">
+      </div>
+      <div class="field" style="flex:1;min-width:80px;">
+        <label>长度（mm）</label>
+        <input type="number" class="bs-length auto" value="${data ? data.length : ''}" min="100" step="10" placeholder="5750" oninput="calcBlastSpecRow(this.closest('.blast-spec-row'))">
+      </div>
+      <div class="field" style="flex:1;min-width:80px;">
+        <label>宽度（mm）</label>
+        <input type="number" class="bs-width auto" value="${data ? data.width : ''}" min="100" step="10" placeholder="2200" oninput="calcBlastSpecRow(this.closest('.blast-spec-row'))">
+      </div>
+      <div class="field" style="flex:1;min-width:90px;">
+        <label>单块面积（㎡）</label>
+        <input type="number" class="bs-single-area auto" readonly style="background:#fef3c7;border-color:#fcd34d;color:#92400e;font-weight:700;">
+      </div>
+      <div class="field" style="flex:1;min-width:90px;">
+        <label>计费面积（㎡）</label>
+        <input type="number" class="bs-billable auto" readonly style="background:#ffedd5;border-color:#fb923c;color:#c2410c;font-weight:700;">
+      </div>
+    </div>
+  `;
+
+  list.appendChild(row);
+  calcBlastSpecRow(row);
+}
+
+function calcBlastSpecRow(row) {
+  const count = parseInt(row.querySelector('.bs-count').value) || 1;
+  const length = parseFloat(row.querySelector('.bs-length').value) || 0;
+  const width = parseFloat(row.querySelector('.bs-width').value) || 0;
+  const singleArea = (length / 1000) * (width / 1000);
+  const billable = (singleArea < 1 ? 1 : singleArea) * count;
+
+  row.querySelector('.bs-single-area').value = singleArea > 0 ? singleArea.toFixed(4) : '';
+  row.querySelector('.bs-billable').value = billable > 0 ? billable.toFixed(4) : '';
+
+  updateBlastSpecTotals();
+  onBlastInput();
+}
+
+function updateBlastSpecTotals() {
+  const rows = document.querySelectorAll('.blast-spec-row');
+  let totalCount = 0, totalArea = 0, billableArea = 0;
+
+  rows.forEach(row => {
+    totalCount += parseInt(row.querySelector('.bs-count').value) || 1;
+    totalArea += parseFloat(row.querySelector('.bs-single-area').value) || 0;
+    billableArea += parseFloat(row.querySelector('.bs-billable').value) || 0;
+  });
+
+  // 单块面积 × 数量 = 总面积（未floor）
+  const totalAreaCalc = rows.length > 0 ? rows.reduce((sum, row) => {
+    const c = parseInt(row.querySelector('.bs-count').value) || 1;
+    const sa = parseFloat(row.querySelector('.bs-single-area').value) || 0;
+    return sum + sa * c;
+  }, 0) : 0;
+
+  document.getElementById('blast-total-count').textContent = totalCount;
+  document.getElementById('blast-total-area').textContent = totalAreaCalc > 0 ? totalAreaCalc.toFixed(3) : '0.000';
+  document.getElementById('blast-min-area').textContent = billableArea > 0 ? billableArea.toFixed(3) : '0.000';
+}
+
+function delBlastSpecRow(btn) {
+  btn.closest('.blast-spec-row').remove();
+  updateBlastSpecTotals();
+  onBlastInput();
+}
+
+function initBlastSpecList() {
+  addBlastSpecRow({ count: 12, length: 5750, width: 2200 });
+}
+
+
+function onBlastInput() {
+  // 从所有爆炸规格行汇总面积和数量
+  const specRows = document.querySelectorAll('.blast-spec-row');
+  let totalCount = 0, totalAreaRaw = 0, billableArea = 0;
+  let firstLength = 0, firstWidth = 0;
+
+  specRows.forEach((row, idx) => {
+    const count = parseInt(row.querySelector('.bs-count').value) || 1;
+    const length = parseFloat(row.querySelector('.bs-length').value) || 0;
+    const width = parseFloat(row.querySelector('.bs-width').value) || 0;
+    const singleArea = (length / 1000) * (width / 1000);
+    const billable = (singleArea < 1 ? 1 : singleArea) * count;
+    totalCount += count;
+    totalAreaRaw += singleArea * count;
+    billableArea += billable;
+    if (idx === 0) { firstLength = length; firstWidth = width; }
+  });
+
+  BS.length = firstLength;
+  BS.width = firstWidth;
+  BS.count = totalCount;
+  BS.cladThick = parseFloat(document.getElementById('b-clad-thick').value) || 0;
+  BS.totalArea = totalAreaRaw;
+  BS.billableArea = billableArea;
+
+  // 向导参考字段（展示第一规格）
+  BS.singleArea = firstLength > 0 ? (firstLength / 1000) * (firstWidth / 1000) : 0;
+
+  const specCount = specRows.length;
+  document.getElementById('step1-res').textContent =
+    specCount > 1
+      ? `共 ${specCount} 个规格，合计 ${totalCount} 块，总面积 ${totalAreaRaw.toFixed(2)}㎡`
+      : `${firstLength}×${firstWidth}mm × ${totalCount}块 = ${totalAreaRaw.toFixed(2)}㎡`;
+
+  // 更新询价清单
+  document.getElementById('q-size').textContent = `${firstLength}×${firstWidth}mm`;
+  document.getElementById('q-area').textContent = totalAreaRaw.toFixed(2) + ' ㎡';
+  document.getElementById('q-thick').textContent =
+    `${BS.cladThick}mm（复层）+ ${document.getElementById('spec').value.includes('+') ? document.getElementById('spec').value.split('+')[1].trim().split(' ')[0] : '?'}mm（基层）`;
+  document.getElementById('q-count').textContent = totalCount + ' 块';
+
+  autoCoefs();
+  ['step2','step3','step4','step5'].forEach(s => {
+    const el = document.getElementById(s + '-num');
+    if (el) el.classList.add('done');
+  });
+  calcBlast();
+}
+
+function calcBlast() {
+  const basePrice = parseFloat(document.getElementById('b-base-price').value) || 0;
+  BS.cSmall  = parseFloat(document.getElementById('c-small').value)  || 1.0;
+  BS.cWide   = parseFloat(document.getElementById('c-wide').value)   || 1.0;
+  BS.cBatch  = parseFloat(document.getElementById('c-batch').value)  || 1.0;
+  BS.cThick  = parseFloat(document.getElementById('c-thick').value)  || 1.0;
+
+  const modCoef = BS.gradeCoef * BS.procCoef * BS.cSmall * BS.cWide * BS.cBatch * BS.cThick;
+  const unitPrice = basePrice * modCoef;
+
+  // 计费面积：从所有爆炸规格行逐行汇总（单块<1㎡按1㎡算）
+  const specRows = document.querySelectorAll('.blast-spec-row');
+  let billableArea = 0;
+  specRows.forEach(row => {
+    const count = parseInt(row.querySelector('.bs-count').value) || 1;
+    const length = parseFloat(row.querySelector('.bs-length').value) || 0;
+    const width = parseFloat(row.querySelector('.bs-width').value) || 0;
+    const singleArea = (length / 1000) * (width / 1000);
+    billableArea += (singleArea < 1 ? 1 : singleArea) * count;
+  });
+  const blastTotal = billableArea * unitPrice;
+
+  const prodQty = parseFloat(document.getElementById('product-qty').value) || 0;
+  const billetQty = parseFloat(document.getElementById('billet-qty').value) || 0;
+
+  document.getElementById('b-mod-coef').value = modCoef.toFixed(3);
+  document.getElementById('b-unit-price').value = unitPrice.toFixed(0);
+  document.getElementById('step5-res').textContent = `综合系数 ${modCoef.toFixed(2)} = ${unitPrice.toFixed(0)}元/㎡`;
+
+  const gradeDesc = { B2:'B2防腐', B1:'B1承压', B0:'B0最高级' };
+  document.getElementById('coef-tags').innerHTML =
+    `<span class="coef-tag">基准 <span class="cv">${basePrice}元/㎡</span></span>`+
+    `<span class="coef-tag">等级×${BS.gradeCoef} <small>${gradeDesc[BS.gradeName]||BS.gradeName}</small></span>`+
+    `<span class="coef-tag">工艺×${BS.procCoef} <small>${BS.procName}</small></span>`+
+    `<span class="coef-tag">小板/窄板×${BS.cSmall.toFixed(2)}</span>`+
+    `<span class="coef-tag">大板/宽板×${BS.cWide.toFixed(2)}</span>`+
+    `<span class="coef-tag">批量×${BS.cBatch.toFixed(2)}</span>`+
+    `<span class="coef-tag">厚复层×${BS.cThick.toFixed(2)}</span>`+
+    `<span class="coef-tag">综合 <span class="cv">×${modCoef.toFixed(2)} = ${unitPrice.toFixed(0)}元/㎡</span></span>`;
+
+  document.getElementById('q-grade').textContent = BS.gradeName + '级';
+  document.getElementById('q-proc').textContent = BS.procName === 'B' ? '仅爆炸（B）' : '爆炸+轧制（BR）';
+
+  document.getElementById('res-blast-total').textContent = blastTotal.toLocaleString('zh-CN', {maximumFractionDigits:0}) + ' 元';
+  document.getElementById('res-blast-area').textContent = billableArea.toFixed(2) + ' ㎡';
+  document.getElementById('res-blast-perton-prod').textContent = (prodQty > 0 ? (blastTotal/prodQty).toFixed(0) : '—') + ' 元/吨';
+  document.getElementById('res-blast-perton-billet').textContent = (billetQty > 0 ? (blastTotal/billetQty).toFixed(0) : '—') + ' 元/吨';
+
+  calc();
+}
+
+// ======================================================
+// 弘力询价清单复制
+// ======================================================
+function copyQuote() {
+  const items = [
+    '📨 弘力询价清单（安徽弘力金属复合材料有限公司）', '',
+    `1. 材料组合：${document.getElementById('q-mat').textContent}`,
+    `2. 厚度：${document.getElementById('q-thick').textContent}`,
+    `3. 单块尺寸：${document.getElementById('q-size').textContent}`,
+    `4. 总面积：${document.getElementById('q-area').textContent}`,
+    `5. 质量等级：${document.getElementById('q-grade').textContent}`,
+    `6. 工艺：${document.getElementById('q-proc').textContent}`,
+    `7. 特殊要求：${document.getElementById('q-extra').textContent}`,
+    `8. 预计数量：${document.getElementById('q-count').textContent}`, '',
+    '请帮忙核算这批爆炸加工费，谢谢！',
+  ].join('\n');
+  navigator.clipboard.writeText(items).then(() => {
+    const btn = document.querySelector('.quote-copy');
+    btn.textContent = '✅ 已复制！';
+    setTimeout(() => btn.textContent = '📋 复制询价清单', 2000);
+  });
+}
+
+// ======================================================
+// 费用模式
+// ======================================================
+function setFeeMode(mode) {
+  feeMode = mode;
+  document.getElementById('mode-auto').classList.toggle('active', mode === 'auto');
+  document.getElementById('mode-manual').classList.toggle('active', mode === 'manual');
+  document.querySelectorAll('.manual-only').forEach(el => el.style.display = mode === 'manual' ? '' : 'none');
+  calc();
+}
+
+// ======================================================
+// 产成品 / 组坯 / 成材率 三选二联动
+// 废钢率：(组坯-成品) × 85%~90%
+// ======================================================
+let _lastModified = 'product'; // 记录最后修改的字段
+
+function onAnyWeightChange(changed) {
+  _lastModified = changed;
+  const product = parseFloat(document.getElementById('product-qty').value) || 0;
+  const billet  = parseFloat(document.getElementById('billet-qty').value)  || 0;
+  const rate   = parseFloat(document.getElementById('yield-rate').value)   || 0;
+
+  const hasProduct = product > 0;
+  const hasBillet  = billet  > 0;
+  const hasRate    = rate    > 0;
+
+  const count = (hasProduct ? 1 : 0) + (hasBillet ? 1 : 0) + (hasRate ? 1 : 0);
+
+  if (count === 3) {
+    // 三者都有，根据最后修改字段决定以谁为准修正
+    if (changed === 'product') {
+      // 用户改了成品 → 以成品为准修正成材率
+      const newRate = billet > 0 ? (product / billet * 100) : rate;
+      document.getElementById('yield-rate').value = newRate.toFixed(2);
+    } else if (changed === 'billet') {
+      // 用户改了组坯 → 以组坯为准修正成材率
+      const newRate = billet > 0 ? (product / billet * 100) : rate;
+      document.getElementById('yield-rate').value = newRate.toFixed(2);
+    } else {
+      // 用户改了成材率 → 以成材率修正组坯
+      const newBillet = rate > 0 ? (product / (rate / 100)) : billet;
+      document.getElementById('billet-qty').value = newBillet.toFixed(3);
+    }
+  } else if (count === 2) {
+    // 填了任意两个 → 算第三个
+    if (hasProduct && hasBillet) {
+      // 有成品+组坯 → 算成材率
+      const newRate = product / billet * 100;
+      document.getElementById('yield-rate').value = newRate.toFixed(2);
+    } else if (hasProduct && hasRate) {
+      // 有成品+成材率 → 算组坯
+      const newBillet = product / (rate / 100);
+      document.getElementById('billet-qty').value = newBillet.toFixed(3);
+    } else if (hasBillet && hasRate) {
+      // 有组坯+成材率 → 算成品
+      const newProduct = billet * (rate / 100);
+      document.getElementById('product-qty').value = newProduct.toFixed(3);
+    }
+  }
+  // count < 2: 什么都不算
+
+  // 更新废钢率区间
+  updateScrapRateRange();
+
+  // 更新倒转费
+  const billetNow = parseFloat(document.getElementById('billet-qty').value) || 0;
+  const retPrice = parseFloat(document.getElementById('ret-price').value) || 0;
+  document.getElementById('ret-total').value = Math.round(billetNow * retPrice);
+
+  updateMatSpecTotals(); // 成材率变化时同步更新预估
+  calc();
+}
+
+// 废钢率区间：(组坯-成品) × 85%~90%
+function updateScrapRateRange() {
+  const billetQty = parseFloat(document.getElementById('billet-qty').value) || 0;
+  const prodQty   = parseFloat(document.getElementById('product-qty').value) || 0;
+  const diff = Math.max(0, billetQty - prodQty);
+  const low  = diff * 0.85;
+  const high = diff * 0.90;
+
+  const scrapRateRange = document.getElementById('scrap-rate-range');
+  const scrapQtyRange  = document.getElementById('scrap-qty-range');
+
+  if (diff > 0) {
+    const pctLow  = (diff / billetQty * 100).toFixed(1);
+    const pctHigh = (diff / billetQty * 100).toFixed(1);
+    scrapRateRange.textContent = `${pctLow}% ~ ${pctHigh}%`;
+    scrapQtyRange.textContent  = `${low.toFixed(3)} ~ ${high.toFixed(3)} 吨`;
+    // 表单中存下限值（85%）
+    document.getElementById('scrap-qty').value = low.toFixed(3);
+  } else {
+    scrapRateRange.textContent = '0% ~ 0%';
+    scrapQtyRange.textContent  = '0.000 ~ 0.000 吨';
+    document.getElementById('scrap-qty').value = '0.000';
+  }
+  // 更新废钢回收金额（用下限）
+  const scrapPrice = parseFloat(document.getElementById('scrap-price').value) || 0;
+  document.getElementById('scrap-amount').value = Math.round(low * scrapPrice);
+}
+
+function onUnitPriceChange() {
+  const v = parseFloat(document.getElementById('unit-price-tax').value) || 0;
+  document.getElementById('unit-price-no-tax').value = Math.round(v / 1.13);
+  const qty = parseFloat(document.getElementById('product-qty').value) || 0;
+  document.getElementById('contract-amount').value = Math.round(v * qty);
+  calc();
+}
+
+// ======================================================
+// 原材料
+// ======================================================
+function onBaseChange() {
+  const mat = document.getElementById('base-mat').value;
+  const p = PRICES[mat];
+  if (p) document.getElementById('base-price-ref').value = p.price;
+  calc();
+}
+
+function onCladChange() {
+  const mat = document.getElementById('clad-mat').value;
+  const p = PRICES[mat];
+  if (p) document.getElementById('clad-price-ref').value = p.price;
+  const blastType = CLAD_BLAST_MAP[mat] || 'ss';
+  const blastInfo = BLAST_BASE[blastType] || BLAST_BASE['ss'];
+  const diffBtn = document.querySelector(`.d-btn[data-type="${blastType}"]`);
+  if (diffBtn) selDiff(diffBtn, blastType, blastInfo.base, blastInfo.hint);
+  else {
+    document.getElementById('b-base-price').value = blastInfo.base;
+    document.getElementById('diff-hint').innerHTML = `📌 当前：<strong>${blastInfo.hint}</strong>`;
+  }
+  const matNames = { ss304:'304 + Q345R', ss316l:'316L + Q345R', ta2:'TA2 + Q345R', ni201:'Ni201 + 碳钢', inconel625:'Inconel625 + SA516', zircon:'锆R60702 + 碳钢' };
+  document.getElementById('q-mat').textContent = matNames[mat] || mat;
+  calc();
+}
+
+function onBasePriceManual() { updateMatSpecTotals(); calc(); }
+function onCladPriceManual() { updateMatSpecTotals(); calc(); }
+function onBaseUsageChange() { updateMatSpecTotals(); calc(); }
+function onCladUsageChange() { updateMatSpecTotals(); calc(); }
+
+// ======================================================
+// 核心计算
+// ======================================================
+function calc() {
+  const prodQty = parseFloat(document.getElementById('product-qty').value) || 0;
+  const billetQty = parseFloat(document.getElementById('billet-qty').value) || 0;
+
+  // 废钢量：已由 updateScrapRateRange() 维护（区间下限85%）
+  const scrapQty = parseFloat(document.getElementById('scrap-qty').value) || 0;
+  const scrapPrice = parseFloat(document.getElementById('scrap-price').value) || 0;
+  const scrapAmt = scrapQty * scrapPrice;
+  document.getElementById('scrap-amount').value = Math.round(scrapAmt);
+
+  const baseAmt = parseFloat(document.getElementById('base-price-ref').value) || 0;
+  const cladAmt = parseFloat(document.getElementById('clad-price-ref').value) || 0;
+  // 重新从规格行计算材料金额（多规格模式）
+  const specRows = document.querySelectorAll('.mat-spec-row');
+  let totalBaseAmt = 0, totalCladAmt = 0;
+  specRows.forEach(row => {
+    totalBaseAmt += (parseFloat(row.querySelector('.ms-base-wt').value) || 0) * baseAmt;
+    totalCladAmt += (parseFloat(row.querySelector('.ms-clad-wt').value) || 0) * cladAmt;
+  });
+  const matBaseAmt = Math.round(totalBaseAmt);
+  const matCladAmt = Math.round(totalCladAmt);
+
+  let frontTotal, backTotal, pkgTotal;
+  if (feeMode === 'auto') {
+    const fu = parseFloat(document.getElementById('fee-front-unit').value) || 0;
+    const bu = parseFloat(document.getElementById('fee-back-unit').value) || 0;
+    const pu = parseFloat(document.getElementById('fee-pkg-unit').value) || 0;
+    frontTotal = fu * prodQty; backTotal = bu * prodQty; pkgTotal = pu * prodQty;
+  } else {
+    frontTotal = parseFloat(document.getElementById('fee-front-manual').value) || 0;
+    backTotal  = parseFloat(document.getElementById('fee-back-manual').value) || 0;
+    pkgTotal   = parseFloat(document.getElementById('fee-pkg-manual').value) || 0;
+  }
+
+  // 计费面积：从所有爆炸规格行逐行汇总（单块<1㎡按1㎡算）
+  const blastSpecRows = document.querySelectorAll('.blast-spec-row');
+  let billableArea = 0;
+  blastSpecRows.forEach(row => {
+    const count = parseInt(row.querySelector('.bs-count').value) || 1;
+    const length = parseFloat(row.querySelector('.bs-length').value) || 0;
+    const width = parseFloat(row.querySelector('.bs-width').value) || 0;
+    const singleArea = (length / 1000) * (width / 1000);
+    billableArea += (singleArea < 1 ? 1 : singleArea) * count;
+  });
+  const unitPrice = parseFloat(document.getElementById('b-unit-price').value) || 0;
+  const blastTotal = billableArea * unitPrice;
+  const retTotal = parseFloat(document.getElementById('ret-total').value) || 0;
+
+  document.getElementById('fee-front-total').value = Math.round(frontTotal);
+  document.getElementById('fee-back-total').value  = Math.round(backTotal);
+  document.getElementById('fee-pkg-total').value   = Math.round(pkgTotal);
+
+  const totalCost = matBaseAmt + matCladAmt + frontTotal + blastTotal + retTotal + backTotal + pkgTotal - scrapAmt;
+  const unitCost  = prodQty > 0 ? totalCost / prodQty : 0;
+
+  const contractAmt = parseFloat(document.getElementById('contract-amount').value) || 0;
+  const contractNoTax = contractAmt / 1.13;
+  document.getElementById('contract-no-tax').value = Math.round(contractNoTax);
+
+  const profitNoTax = contractNoTax - totalCost;
+  const profitUnit   = prodQty > 0 ? profitNoTax / prodQty : 0;
+  const margin       = contractNoTax > 0 ? profitNoTax / contractNoTax * 100 : 0;
+  const profitTax    = contractAmt - totalCost;
+
+  const fmt = n => n.toLocaleString('zh-CN', {maximumFractionDigits:0});
+  const fmt3 = n => n.toLocaleString('zh-CN', {maximumFractionDigits:3});
+
+  document.getElementById('r-prod-qty').textContent = fmt3(prodQty) + ' 吨';
+  document.getElementById('r-billet-qty').textContent = fmt3(billetQty) + ' 吨';
+  document.getElementById('r-base').textContent = fmt(baseAmt) + ' 元';
+  document.getElementById('r-clad').textContent = fmt(cladAmt) + ' 元';
+  document.getElementById('r-front').textContent = fmt(Math.round(frontTotal)) + ' 元';
+  document.getElementById('r-blast').textContent = fmt(Math.round(blastTotal)) + ' 元';
+  document.getElementById('r-blast2').textContent = fmt(Math.round(blastTotal)) + ' 元';
+  document.getElementById('r-ret').textContent = fmt(Math.round(retTotal)) + ' 元';
+  document.getElementById('r-back').textContent = fmt(Math.round(backTotal)) + ' 元';
+  document.getElementById('r-pkg').textContent  = fmt(Math.round(pkgTotal)) + ' 元';
+  document.getElementById('r-scrap').textContent = '-' + fmt(Math.round(scrapAmt)) + ' 元';
+  document.getElementById('r-scrap-qty-label') && (document.getElementById('r-scrap-qty-label').textContent = scrapQty.toFixed(3) + ' 吨');
+  document.getElementById('r-total').textContent = fmt(Math.round(totalCost)) + ' 元';
+  document.getElementById('r-unit-cost').textContent = fmt(Math.round(unitCost)) + ' 元/吨';
+  document.getElementById('r-revenue').textContent = fmt(Math.round(contractNoTax)) + ' 元';
+  document.getElementById('r-profit').textContent = fmt(Math.round(profitNoTax)) + ' 元';
+  document.getElementById('r-profit-unit').textContent = fmt(Math.round(profitUnit)) + ' 元/吨';
+  document.getElementById('r-margin').textContent = margin.toFixed(1) + '%';
+  document.getElementById('r-revenue-tax').textContent = fmt(Math.round(contractAmt)) + ' 元';
+  document.getElementById('r-profit-tax').textContent = fmt(Math.round(profitTax)) + ' 元';
+
+  const m = margin < 0 ? 'red' : margin < 20 ? '' : 'green';
+  document.getElementById('r-margin').className = 'vl ' + m;
+  document.getElementById('r-profit').className = 'vl ' + m;
+
+  const tot = contractNoTax || 1;
+  const cp = Math.min(totalCost / tot * 100, 100);
+  const pp = Math.min(Math.max(0, profitNoTax) / tot * 100, 100);
+  document.getElementById('pbar-cost').style.width = cp + '%';
+  document.getElementById('pbar-profit').style.width = pp + '%';
+  document.getElementById('pbar-label').textContent = `成本 ${cp.toFixed(1)}% | 利润 ${pp.toFixed(1)}%`;
+
+  drawBars(baseAmt, cladAmt, frontTotal, blastTotal, retTotal, backTotal, pkgTotal, scrapAmt);
+}
+
+function drawBars(base, clad, front, blast, ret, back, pkg, scrap) {
+  const items = [
+    { label:'基材',     val:base,  color:'#3b82f6' },
+    { label:'复材',     val:clad,  color:'#f59e0b' },
+    { label:'前道费',   val:front, color:'#6366f1' },
+    { label:'爆炸费',   val:blast, color:'#ef4444' },
+    { label:'倒转费',   val:ret,   color:'#f97316' },
+    { label:'后道费',   val:back,  color:'#8b5cf6' },
+    { label:'包装费',   val:pkg,   color:'#10b981' },
+    { label:'废钢冲减', val:-scrap,color:'#9ca3af' },
+  ];
+  const absTot = items.reduce((s,i) => s + Math.abs(i.val), 0) || 1;
+  const fmt = n => n.toLocaleString('zh-CN', {maximumFractionDigits:0});
+  document.getElementById('cost-bar-wrap').innerHTML = items.map(it => {
+    const pct = Math.abs(it.val) / absTot * 100;
+    return `<div class="cost-bar-item">
+      <div class="barlbl">${it.label}</div>
+      <div class="barbg"><div class="barfill" style="width:${Math.max(2,pct)}%;background:${it.color};"></div></div>
+      <div class="barpct">${pct.toFixed(1)}%</div>
+      <div class="baramt">${fmt(Math.abs(it.val))}元</div>
+    </div>`;
+  }).join('');
+}
+
+// ======================================================
+// 实时价格
+// ======================================================
+function renderPrices() {
+  const keys = ['ss304','ss316l','q345r','ta2','ni201','scrap'];
+  document.getElementById('price-grid').innerHTML = keys.map(k => {
+    const p = PRICES[k];
+    return `<div class="price-card" onclick="applyPrice('${k}')" title="点击填入计算器" style="cursor:pointer">
+      <div class="mn">${p.type}</div>
+      <div class="mt">${p.name}</div>
+      <div class="mp">${p.price.toLocaleString()}</div>
+      <div class="mu">元/吨 | ${p.range}</div>
+      <div class="ms">📡 ${p.source}</div>
+    </div>`;
+  }).join('');
+}
+
+function applyPrice(key) {
+  const p = PRICES[key];
+  if (!p) return;
+  const baseMap = { ss304:'ss304', ss316l:'ss316', q345r:'q345r', ta2:'ta2', ni201:'ni201', scrap:'scrap' };
+  const cladMap = { ss304:'ss304', ss316l:'ss316l', q345r:'q345r', ta2:'ta2', ni201:'ni201' };
+  if (baseMap[key]) { document.getElementById('base-mat').value = baseMap[key]; onBaseChange(); }
+  if (cladMap[key]) { document.getElementById('clad-mat').value = cladMap[key]; onCladChange(); }
+  const cards = document.querySelectorAll('.price-card');
+  cards.forEach(c => c.style.boxShadow = '');
+  event.currentTarget.style.boxShadow = '0 0 0 3px #10b981';
+  setTimeout(() => event.currentTarget.style.boxShadow = '', 1000);
+}
+
+async function refreshPrices() {
+  const btn = document.querySelector('.refresh-btn');
+  btn.textContent = '⏳ 刷新中...';
+  btn.disabled = true;
+  await new Promise(r => setTimeout(r, 800));
+  document.getElementById('price-date').textContent = new Date().toLocaleDateString('zh-CN');
+  btn.textContent = '✅ 已刷新';
+  btn.disabled = false;
+  setTimeout(() => btn.innerHTML = '🔄 刷新价格', 2000);
+}
+
+// ======================================================
+// 产品类型切换
+// ======================================================
+function onProductChange() {
+  const type = document.getElementById('product-type').value;
+  const baseMap = { ss304:'q345r', ss316:'q345r', titanium:'q345r', nickel:'q345r', nickel625:'sa516', zircon:'q345r' };
+  const cladMap = { ss304:'ss304', ss316:'ss316l', titanium:'ta2', nickel:'ni201', nickel625:'inconel625', zircon:'zircon' };
+  if (baseMap[type]) { document.getElementById('base-mat').value = baseMap[type]; onBaseChange(); }
+  if (cladMap[type]) { document.getElementById('clad-mat').value = cladMap[type]; onCladChange(); }
+}
+
+// ======================================================
+// 原材料：厚度×长度×宽度×密度÷1,000,000,000×张数
+// ======================================================
+
+// 密度自动匹配映射（已停用，密度改为手动填写）
+// const DENSITY_MAT_MAP = {
+//   q345r: 7.85, q355: 7.85, sa516: 7.85,
+//   ss304: 7.93, ss316l: 7.98,
+//   ta2: 4.51,
+//   ni201: 8.89, inconel625: 8.44,
+//   zircon: 6.51,
+// };
+
+// 材质变化 → 更新单价（多规格模式）
+function onBaseChange() {
+  const mat = document.getElementById('base-mat') ? document.getElementById('base-mat').value : '';
+  const p = PRICES[mat];
+  if (p) document.getElementById('base-price-ref').value = p.price;
+  updateMatSpecTotals();
+  calc();
+}
+
+function onCladChange() {
+  const mat = document.getElementById('clad-mat') ? document.getElementById('clad-mat').value : '';
+  const p = PRICES[mat];
+  if (p) document.getElementById('clad-price-ref').value = p.price;
+  updateMatSpecTotals();
+  calc();
+}
+
+// 体积×密度 → 重量 核心计算
+// ======================================================
+// 原材料成本计算器：多规格模式
+// ======================================================
+
+let _matSpecCount = 0;
+
+function addMatSpecRow(data) {
+  const list = document.getElementById('mat-spec-list');
+  _matSpecCount++;
+  const idx = _matSpecCount;
+
+  const row = document.createElement('div');
+  row.className = 'mat-spec-row';
+  row.setAttribute('data-idx', idx);
+  row.style.cssText = 'background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px;margin-bottom:8px;position:relative;';
+
+  row.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <strong style="color:#1d4ed8;font-size:0.88rem;">📐 规格 #${idx}</strong>
+      <button onclick="delMatSpecRow(this)" class="del-row-btn" style="background:#ef4444;color:white;border:none;border-radius:6px;padding:3px 10px;font-size:0.75rem;cursor:pointer;display:${idx > 1 ? '' : 'none'};">🗑 删除</button>
+    </div>
+    <div class="row" style="flex-wrap:wrap;">
+      <div class="field" style="flex:1;min-width:80px;">
+        <label>数量（块）</label>
+        <input type="number" class="ms-count auto" value="${data ? data.count : 1}" min="1" step="1" oninput="calcMatSpecRow(this.closest('.mat-spec-row'))">
+      </div>
+      <div class="field" style="flex:1;min-width:80px;">
+        <label>长度（mm）</label>
+        <input type="number" class="ms-length auto" value="${data ? data.length : ''}" min="100" step="10" placeholder="5750" oninput="calcMatSpecRow(this.closest('.mat-spec-row'))">
+      </div>
+      <div class="field" style="flex:1;min-width:80px;">
+        <label>宽度（mm）</label>
+        <input type="number" class="ms-width auto" value="${data ? data.width : ''}" min="100" step="10" placeholder="2200" oninput="calcMatSpecRow(this.closest('.mat-spec-row'))">
+      </div>
+      <div class="field" style="flex:1;min-width:80px;">
+        <label>基材厚（mm）</label>
+        <input type="number" class="ms-base-thick auto" value="${data ? data.baseThick : ''}" min="1" step="1" placeholder="12" oninput="calcMatSpecRow(this.closest('.mat-spec-row'))">
+      </div>
+      <div class="field" style="flex:1;min-width:80px;">
+        <label>基材密度</label>
+        <input type="number" class="ms-base-dens auto" value="${data ? data.baseDens : '7.85'}" min="1" max="20" step="0.01" oninput="calcMatSpecRow(this.closest('.mat-spec-row'))">
+      </div>
+      <div class="field" style="flex:1;min-width:80px;">
+        <label>复材厚（mm）</label>
+        <input type="number" class="ms-clad-thick auto" value="${data ? data.cladThick : ''}" min="0.5" step="0.5" placeholder="3" oninput="calcMatSpecRow(this.closest('.mat-spec-row'))">
+      </div>
+      <div class="field" style="flex:1;min-width:80px;">
+        <label>复材密度</label>
+        <input type="number" class="ms-clad-dens auto" value="${data ? data.cladDens : '7.93'}" min="1" max="20" step="0.01" oninput="calcMatSpecRow(this.closest('.mat-spec-row'))">
+      </div>
+    </div>
+    <div class="row" style="flex-wrap:wrap;margin-top:4px;">
+      <div class="field" style="flex:1;min-width:100px;">
+        <label>基材体积（mm³）</label>
+        <input type="number" class="ms-base-vol auto" readonly style="background:#e0f2fe;border-color:#7dd3fc;color:#0369a1;font-weight:700;">
+      </div>
+      <div class="field" style="flex:1;min-width:100px;">
+        <label>基材用量（吨）</label>
+        <input type="number" class="ms-base-wt auto" readonly style="background:#dbeafe;border-color:#93c5fd;color:#1d4ed8;font-weight:700;">
+      </div>
+      <div class="field" style="flex:1;min-width:100px;">
+        <label>复材体积（mm³）</label>
+        <input type="number" class="ms-clad-vol auto" readonly style="background:#e0f2fe;border-color:#7dd3fc;color:#0369a1;font-weight:700;">
+      </div>
+      <div class="field" style="flex:1;min-width:100px;">
+        <label>复材用量（吨）</label>
+        <input type="number" class="ms-clad-wt auto" readonly style="background:#fce7f3;border-color:#f9a8d4;color:#be185d;font-weight:700;">
+      </div>
+    </div>
+  `;
+
+  list.appendChild(row);
+  calcMatSpecRow(row);
+}
+
+function calcMatSpecRow(row) {
+  const count = parseInt(row.querySelector('.ms-count').value) || 1;
+  const length = parseFloat(row.querySelector('.ms-length').value) || 0;
+  const width = parseFloat(row.querySelector('.ms-width').value) || 0;
+  const bThick = parseFloat(row.querySelector('.ms-base-thick').value) || 0;
+  const bDens = parseFloat(row.querySelector('.ms-base-dens').value) || 0;
+  const cThick = parseFloat(row.querySelector('.ms-clad-thick').value) || 0;
+  const cDens = parseFloat(row.querySelector('.ms-clad-dens').value) || 0;
+
+  const bVol = bThick * length * width;
+  const cVol = cThick * length * width;
+  const bWt = bDens > 0 ? bVol * bDens / 1e9 * count : 0;
+  const cWt = cDens > 0 ? cVol * cDens / 1e9 * count : 0;
+
+  row.querySelector('.ms-base-vol').value = bVol > 0 ? bVol.toFixed(0) : '';
+  row.querySelector('.ms-base-wt').value = bWt > 0 ? bWt.toFixed(4) : '';
+  row.querySelector('.ms-clad-vol').value = cVol > 0 ? cVol.toFixed(0) : '';
+  row.querySelector('.ms-clad-wt').value = cWt > 0 ? cWt.toFixed(4) : '';
+
+  updateMatSpecTotals();
+  syncBlastSpecsFromMatSpecs();
+}
+
+function updateMatSpecTotals() {
+  const rows = document.querySelectorAll('.mat-spec-row');
+  let totalBase = 0, totalClad = 0;
+  rows.forEach(row => {
+    totalBase += parseFloat(row.querySelector('.ms-base-wt').value) || 0;
+    totalClad += parseFloat(row.querySelector('.ms-clad-wt').value) || 0;
+  });
+  const total = totalBase + totalClad;
+  const bPrice = parseFloat(document.getElementById('base-price-ref').value) || 0;
+  const cPrice = parseFloat(document.getElementById('clad-price-ref').value) || 0;
+  const totalAmt = Math.round(totalBase * bPrice + totalClad * cPrice);
+
+  document.getElementById('mat-base-wt').textContent = totalBase > 0 ? totalBase.toFixed(3) : '0.000';
+  document.getElementById('mat-clad-wt').textContent = totalClad > 0 ? totalClad.toFixed(3) : '0.000';
+  document.getElementById('mat-total-wt').textContent = total > 0 ? total.toFixed(3) : '0.000';
+  document.getElementById('mat-total-amt').textContent = totalAmt > 0 ? totalAmt.toLocaleString() : '0';
+
+  // 预估：按成材率反推实际需采购重量
+  const yieldRate = parseFloat(document.getElementById('yield-rate').value) / 100 || 1;
+  const estBase = yieldRate > 0 ? totalBase / yieldRate : 0;
+  const estClad = yieldRate > 0 ? totalClad / yieldRate : 0;
+  const estTotal = estBase + estClad;
+  const estAmt = Math.round(estBase * bPrice + estClad * cPrice);
+  document.getElementById('mat-est-base-wt').textContent = estBase > 0 ? estBase.toFixed(3) : '0.000';
+  document.getElementById('mat-est-clad-wt').textContent = estClad > 0 ? estClad.toFixed(3) : '0.000';
+  document.getElementById('mat-est-total-wt').textContent = estTotal > 0 ? estTotal.toFixed(3) : '0.000';
+  document.getElementById('mat-est-total-amt').textContent = estAmt > 0 ? estAmt.toLocaleString() : '0';
+
+  // 同步到废钢计算
+  const scrapQty = parseFloat(document.getElementById('scrap-qty').value) || 0;
+  const scrapPrice = parseFloat(document.getElementById('scrap-price').value) || 0;
+  document.getElementById('scrap-amount').value = scrapQty > 0 ? Math.round(scrapQty * scrapPrice) : '';
+  calc();
+}
+
+function delMatSpecRow(btn) {
+  btn.closest('.mat-spec-row').remove();
+  updateMatSpecTotals();
+  syncBlastSpecsFromMatSpecs();
+}
+
+// 爆炸规格自动同步：原材料规格变化时 → 同步到爆炸规格列表
+function syncBlastSpecsFromMatSpecs() {
+  const matRows = document.querySelectorAll('.mat-spec-row');
+  const blastList = document.getElementById('blast-spec-list');
+  blastList.innerHTML = '';
+  _blastSpecCount = 0;
+
+  matRows.forEach(row => {
+    const count = row.querySelector('.ms-count').value;
+    const length = row.querySelector('.ms-length').value;
+    const width = row.querySelector('.ms-width').value;
+
+    // 添加同步的爆炸规格行（不触发 calcMatSpecRow，避免循环）
+    addBlastSpecRowSilent({
+      count: count ? parseInt(count) : 1,
+      length: length ? parseFloat(length) : 0,
+      width: width ? parseFloat(width) : 0,
+    });
+  });
+
+  updateBlastSpecTotals();
+  onBlastInput();
+}
+
+// 静默添加爆炸规格行（不触发 calcMatSpecRow 循环）
+function addBlastSpecRowSilent(data) {
+  const list = document.getElementById('blast-spec-list');
+  _blastSpecCount++;
+  const idx = _blastSpecCount;
+
+  const row = document.createElement('div');
+  row.className = 'blast-spec-row';
+  row.setAttribute('data-idx', idx);
+  row.style.cssText = 'background:#fff7f0;border:1px solid #fed7aa;border-radius:10px;padding:10px;margin-bottom:6px;';
+
+  row.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <strong style="color:#c2410c;font-size:0.88rem;">💥 规格 #${idx}</strong>
+      <button onclick="delBlastSpecRow(this)" class="del-row-btn" style="background:#ef4444;color:white;border:none;border-radius:6px;padding:3px 10px;font-size:0.75rem;cursor:pointer;display:${idx > 1 ? '' : 'none'};">🗑 删除</button>
+    </div>
+    <div class="row">
+      <div class="field" style="flex:1;min-width:80px;">
+        <label>数量（块）</label>
+        <input type="number" class="bs-count auto" value="${data ? data.count : 1}" min="1" step="1" oninput="calcBlastSpecRow(this.closest('.blast-spec-row'))">
+      </div>
+      <div class="field" style="flex:1;min-width:80px;">
+        <label>长度（mm）</label>
+        <input type="number" class="bs-length auto" value="${data ? data.length : ''}" min="100" step="10" placeholder="5750" oninput="calcBlastSpecRow(this.closest('.blast-spec-row'))">
+      </div>
+      <div class="field" style="flex:1;min-width:80px;">
+        <label>宽度（mm）</label>
+        <input type="number" class="bs-width auto" value="${data ? data.width : ''}" min="100" step="10" placeholder="2200" oninput="calcBlastSpecRow(this.closest('.blast-spec-row'))">
+      </div>
+      <div class="field" style="flex:1;min-width:90px;">
+        <label>单块面积（㎡）</label>
+        <input type="number" class="bs-single-area auto" readonly style="background:#fef3c7;border-color:#fcd34d;color:#92400e;font-weight:700;">
+      </div>
+      <div class="field" style="flex:1;min-width:90px;">
+        <label>计费面积（㎡）</label>
+        <input type="number" class="bs-billable auto" readonly style="background:#ffedd5;border-color:#fb923c;color:#c2410c;font-weight:700;">
+      </div>
+    </div>
+  `;
+
+  list.appendChild(row);
+  calcBlastSpecRow(row);
+}
+
+function importSpecsFromManual() {
+  const rows = document.querySelectorAll('.product-row');
+  if (rows.length === 0) { alert('订单明细为空，请先填写！'); return; }
+  // 清空现有规格
+  const list = document.getElementById('mat-spec-list');
+  list.innerHTML = '';
+  _matSpecCount = 0;
+  rows.forEach(row => {
+    addMatSpecRow({
+      count: parseInt(row.querySelector('.m-count').value) || 1,
+      length: parseFloat(row.querySelector('.m-length').value) || 0,
+      width: parseFloat(row.querySelector('.m-width').value) || 0,
+      baseThick: parseFloat(row.querySelector('.m-base-thick').value) || 0,
+      baseDens: parseFloat(row.querySelector('.m-base-density').value) || 0,
+      cladThick: parseFloat(row.querySelector('.m-clad-thick').value) || 0,
+      cladDens: parseFloat(row.querySelector('.m-clad-density').value) || 0,
+    });
+  });
+  syncBlastSpecsFromMatSpecs();
+}
+
+function initMatSpecList() {
+  addMatSpecRow();
+}
+
+// ======================================================
+// 手动输入区：生产通知单
+// ======================================================
+
+// 材质变化 → 更新密度显示
+// 材质变化 → 触发重量重算（密度保持手动填写值）
+function onManualMatChange(el) {
+  const row = el.closest('.product-row');
+  if (!row) return;
+  calcManualRow(row);
+}
+
+// 密度变化 → 自动计算重量
+function onManualDensityChange(el) {
+  const row = el.closest('.product-row');
+  if (!row) return;
+  const densityEl = el;
+  const densityRow = el.closest('.field');
+  // 更新提示
+  const hint = densityRow.querySelector('.density-hint');
+  if (hint) hint.textContent = '手动输入密度值';
+  calcManualRow(row);
+}
+
+// 密度来源切换（自动/手动）
+// 计算单行产品材料重量（体积×密度×数量）
+function calcManualRow(row) {
+  const length = parseFloat(row.querySelector('.m-length').value) || 0;
+  const width = parseFloat(row.querySelector('.m-width').value) || 0;
+  const count = parseInt(row.querySelector('.m-count').value) || 1;
+  const unitWt = parseFloat(row.querySelector('.m-unit-wt').value) || 0;
+
+  // 复材（厚度×长度×宽度×密度÷1,000,000,000×张数）
+  const cMat = row.querySelector('.m-clad-mat').value;
+  const cThick = parseFloat(row.querySelector('.m-clad-thick').value) || 0;
+  const cDens = parseFloat(row.querySelector('.m-clad-density').value) || 0;
+  const cVol = cThick * length * width;
+  const cWt = cDens > 0 ? cVol * cDens / 1e9 * count : 0;
+
+  // 基材（厚度×长度×宽度×密度÷1,000,000,000×张数）
+  const bMat = row.querySelector('.m-base-mat').value;
+  const bThick = parseFloat(row.querySelector('.m-base-thick').value) || 0;
+  const bDens = parseFloat(row.querySelector('.m-base-density').value) || 0;
+  const bVol = bThick * length * width;
+  const bWt = bDens > 0 ? bVol * bDens / 1e9 * count : 0;
+
+  // 显示（体积为单块，总重量已×数量）
+  row.querySelector('.m-clad-vol').value = cVol > 0 ? cVol.toFixed(0) : '';
+  row.querySelector('.m-base-vol').value = bVol > 0 ? bVol.toFixed(0) : '';
+  row.querySelector('.m-clad-wt').textContent = cWt > 0 ? cWt.toFixed(4) : '0';
+  row.querySelector('.m-base-wt').textContent = bWt > 0 ? bWt.toFixed(4) : '0';
+  const totalMat = cWt + bWt;
+  row.querySelector('.m-total-mat-wt').textContent = totalMat > 0 ? totalMat.toFixed(3) : '0';
+
+  // 总重量 = 单块重量 × 数量（成品总重，仅供参考）
+  const totalWt = unitWt * count;
+  row.querySelector('.m-total-wt').value = totalWt > 0 ? totalWt.toFixed(3) : '';
+
+  // 更新汇总
+  updateManualTotals();
+}
+
+// 更新手动表单汇总
+function updateManualTotals() {
+  const rows = document.querySelectorAll('.product-row');
+  let totalBaseWt = 0, totalCladWt = 0, totalProdWt = 0, totalCount = 0, totalArea = 0;
+
+  rows.forEach(row => {
+    const length = parseFloat(row.querySelector('.m-length').value) || 0;
+    const width = parseFloat(row.querySelector('.m-width').value) || 0;
+    const count = parseInt(row.querySelector('.m-count').value) || 1;
+    const cThick = parseFloat(row.querySelector('.m-clad-thick').value) || 0;
+    const bThick = parseFloat(row.querySelector('.m-base-thick').value) || 0;
+    const cDens = parseFloat(row.querySelector('.m-clad-density').value) || 0;
+    const bDens = parseFloat(row.querySelector('.m-base-density').value) || 0;
+    const cVol = cThick * length * width;
+    const bVol = bThick * length * width;
+    const cWt = cDens > 0 ? cVol * cDens / 1e9 * count : 0;
+    const bWt = bDens > 0 ? bVol * bDens / 1e9 * count : 0;
+    totalBaseWt += bWt;
+    totalCladWt += cWt;
+    totalProdWt += bWt + cWt;
+    totalCount += count;
+    totalArea += (length / 1000) * (width / 1000) * count;
+  });
+
+  document.getElementById('m-total-base-wt').value = totalBaseWt.toFixed(3);
+  document.getElementById('m-total-clad-wt').value = totalCladWt.toFixed(3);
+  document.getElementById('m-total-prod-wt').value = totalProdWt.toFixed(3);
+  document.getElementById('m-total-count').value = totalCount;
+  document.getElementById('m-total-area').value = totalArea.toFixed(2);
+
+  // 显示删除按钮（第2行起）
+  const allRows = document.querySelectorAll('.product-row');
+  allRows.forEach((row, idx) => {
+    const btn = row.querySelector('.del-row-btn');
+    if (btn) btn.style.display = idx > 0 ? '' : 'none';
+  });
+}
+
+// 添加产品行
+let _rowCount = 1;
+function addProductRow() {
+  _rowCount++;
+  const list = document.getElementById('product-list');
+  const tmpl = list.querySelector('.product-row').cloneNode(true);
+  // 更新序号
+  tmpl.setAttribute('data-index', _rowCount - 1);
+  const title = tmpl.querySelector('strong');
+  if (title) title.textContent = '#' + _rowCount + ' 产品行';
+
+  // 清空输入值
+  ['.m-length', '.m-width', '.m-count', '.m-unit-wt', '.m-total-wt',
+   '.m-clad-thick', '.m-base-thick', '.m-clad-density', '.m-base-density',
+   '.m-clad-vol', '.m-base-vol'].forEach(sel => {
+    const el = tmpl.querySelector(sel);
+    if (el) {
+      if (el.tagName === 'INPUT' && el.type === 'number') el.value = '';
+    }
+  });
+  // 重设计数器
+  tmpl.querySelector('.m-clad-wt').textContent = '—';
+  tmpl.querySelector('.m-base-wt').textContent = '—';
+  tmpl.querySelector('.m-total-mat-wt').textContent = '—';
+  tmpl.querySelector('.m-total-wt').value = '';
+
+  // 绑定事件
+  tmpl.querySelectorAll('input, select').forEach(el => {
+    el.oninput = () => calcManualRow(tmpl);
+  });
+  tmpl.querySelector('.m-clad-mat').onchange = () => onManualMatChange(tmpl.querySelector('.m-clad-mat'));
+  tmpl.querySelector('.m-base-mat').onchange = () => onManualMatChange(tmpl.querySelector('.m-base-mat'));
+
+  // 删除按钮
+  const delBtn = tmpl.querySelector('.del-row-btn');
+  if (delBtn) delBtn.style.display = '';
+
+  list.appendChild(tmpl);
+  updateManualTotals();
+}
+
+// 删除产品行
+function delProductRow(btn) {
+  const row = btn.closest('.product-row');
+  if (!row) return;
+  if (document.querySelectorAll('.product-row').length <= 1) {
+    alert('至少保留一行产品！');
+    return;
+  }
+  row.remove();
+  updateManualTotals();
+}
+
+// 将手动表单填入计算器（多规格模式）
+function applyManualToCalculator() {
+  const rows = document.querySelectorAll('.product-row');
+  if (rows.length === 0) { alert('没有产品数据！'); return; }
+  importSpecsFromManual();
+  // 提示
+  const btn = document.querySelector('[onclick="applyManualToCalculator()"]');
+  if (btn) {
+    btn.textContent = '✅ 已填入！';
+    btn.style.background = '#166534';
+    setTimeout(() => { btn.textContent = '✅ 填入成本计算器'; btn.style.background = ''; }, 2500);
+  }
+}
+
+// ======================================================
+// 初始化
+// ======================================================
+function init() {
+  renderPrices();
+  initMatSpecList();   // 原材料规格 → 自动同步到爆炸规格
+  initBlastSpecList(); // 爆炸规格兜底（sync后若空了再加一行）
+  autoCoefs();
+  onBlastInput();
+  updateScrapRateRange();
+  updateManualTotals();
+  // 给默认产品行绑定事件
+  document.querySelectorAll('.product-row').forEach(row => {
+    row.querySelectorAll('input, select').forEach(el => {
+      if (el.classList.contains('m-length') || el.classList.contains('m-width') ||
+          el.classList.contains('m-count') || el.classList.contains('m-unit-wt') ||
+          el.classList.contains('m-clad-thick') || el.classList.contains('m-base-thick') ||
+          el.classList.contains('m-clad-density') || el.classList.contains('m-base-density')) {
+        el.oninput = () => calcManualRow(row);
+      }
+    });
+    row.querySelector('.m-clad-mat').onchange = () => onManualMatChange(row.querySelector('.m-clad-mat'));
+    row.querySelector('.m-base-mat').onchange = () => onManualMatChange(row.querySelector('.m-base-mat'));
+    calcManualRow(row);
+  });
+  calc();
+  updateStepIndicator(1);
+}
+init();
+</script>
+</body>
+</html>
