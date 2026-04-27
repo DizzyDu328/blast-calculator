@@ -302,175 +302,65 @@ input[type="date"] { font-family: inherit; }
 <!-- Toast 通知 -->
 <div id="toast"></div>
 
-<!-- 金太阳订单信息 -->
-<div class="card" style="border:3px solid #7c3aed;">
-  <div class="card-header purple" style="background:#7c3aed;">📋 当前订单：山东金太阳工业设备集团有限公司</div>
+<!-- 动态订单信息卡 -->
+<div class="card" id="order-info-card" style="border:3px solid #7c3aed; display:none;">
+  <div class="card-header purple" style="background:#7c3aed;" id="order-header-title">📋 当前订单</div>
   <div class="card-body" style="padding:10px 14px;">
-    <div class="row" style="gap:16px;">
+    <div class="row" style="gap:16px;" id="order-meta-row">
       <div style="flex:1;min-width:120px;">
         <div style="font-size:0.7rem;color:#718096;">合同编号</div>
-        <div style="font-weight:700;color:#7c3aed;font-size:0.9rem;">JS260320018</div>
+        <div style="font-weight:700;color:#7c3aed;font-size:0.9rem;" id="order-contract-no">—</div>
+      </div>
+      <div style="flex:1;min-width:120px;">
+        <div style="font-size:0.7rem;color:#718096;">客户名称</div>
+        <div style="font-weight:700;font-size:0.9rem;" id="order-customer">—</div>
       </div>
       <div style="flex:1;min-width:120px;">
         <div style="font-size:0.7rem;color:#718096;">应用场景</div>
-        <div style="font-weight:700;font-size:0.9rem;">容器</div>
+        <div style="font-weight:700;font-size:0.9rem;" id="order-scenario">—</div>
       </div>
       <div style="flex:1;min-width:120px;">
         <div style="font-size:0.7rem;color:#718096;">交货时间</div>
-        <div style="font-weight:700;font-size:0.9rem;">5月2日</div>
+        <div style="font-weight:700;font-size:0.9rem;" id="order-delivery-date">—</div>
       </div>
       <div style="flex:1;min-width:120px;">
         <div style="font-size:0.7rem;color:#718096;">交货地点</div>
-        <div style="font-weight:700;font-size:0.9rem;">济南长清区张夏工业园</div>
+        <div style="font-weight:700;font-size:0.9rem;" id="order-delivery-place">—</div>
       </div>
     </div>
-    <div class="tip-box" style="margin-top:8px;background:#f5f3ff;border-color:#c4b5fd;color:#6d28d9;">
-      <strong>订单明细（共4行/18张/24.28吨）：</strong>
-      <table style="width:100%;border-collapse:collapse;font-size:0.75rem;margin-top:6px;">
-        <tr style="background:#e9d5ff;">
-          <th style="padding:3px 6px;text-align:left;">序号</th>
-          <th style="padding:3px 6px;">钢种</th>
-          <th style="padding:3px 6px;">规格</th>
-          <th style="padding:3px 6px;">尺寸</th>
-          <th style="padding:3px 6px;">单重</th>
-          <th style="padding:3px 6px;">张数</th>
-          <th style="padding:3px 6px;">吨位</th>
-        </tr>
-        <tr><td style="padding:2px 6px;">1</td><td>S32168+Q345R</td><td>3+12mm</td><td>2200×5750</td><td>1.493t</td><td>12张</td><td>17.916t</td></tr>
-        <tr style="background:#f5f3ff;"><td style="padding:2px 6px;">2</td><td>S32168+Q345R</td><td>3+12mm</td><td>2000×5750</td><td>1.357t</td><td>2张</td><td>2.714t</td></tr>
-        <tr><td style="padding:2px 6px;">3</td><td>S32168+Q345R</td><td>3+12mm</td><td>850×5750</td><td>0.576t</td><td>2张</td><td>1.152t</td></tr>
-        <tr style="background:#f5f3ff;"><td style="padding:2px 6px;">4</td><td>S32168+Q345R</td><td>3+12mm</td><td>2300×4600</td><td>1.249t</td><td>2张</td><td>2.498t</td></tr>
-        <tr style="background:#7c3aed;color:white;font-weight:700;">
-          <td style="padding:2px 6px;">合计</td><td colspan="2">B1级·NB/T47002.1-2019</td>
-          <td style="padding:2px 6px;">—</td><td style="padding:2px 6px;">—</td>
-          <td style="padding:2px 6px;">18张</td><td style="padding:2px 6px;">24.28t</td>
-        </tr>
-      </table>
-      <div style="margin-top:5px;font-size:0.72rem;">
-        <strong>技术要求：</strong>需出具含晶间腐蚀检测的合格报告 · 板面平整 · 边部齐整 · 理算计重
+    <div class="tip-box" id="order-detail-box" style="margin-top:8px;background:#f5f3ff;border-color:#c4b5fd;color:#6d28d9; display:none;">
+      <strong id="order-detail-summary">订单明细：</strong>
+      <div class="table-scroll-wrap" style="margin-top:6px;">
+        <table id="order-detail-table" style="width:100%;border-collapse:collapse;font-size:0.75rem;">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
       </div>
+      <div style="margin-top:5px;font-size:0.72rem;" id="order-tech-req"></div>
     </div>
   </div>
 </div>
 
-<!-- 金太阳订单各行成本对比表 -->
-<div class="card" style="border:3px solid #059669;margin-top:8px;">
-  <div class="card-header" style="background:#059669;color:white;">💰 金太阳订单 · 各行成本估算（S32168+Q345R 3+12mm B1级 · 合同总价90万元/13%税率）</div>
-  <div class="card-body" style="padding:8px 12px;font-size:0.73rem;">
-    <table style="width:100%;border-collapse:collapse;">
-      <tr style="background:#d1fae5;color:#065f46;font-size:0.72rem;">
-        <th style="padding:4px 5px;text-align:center;">行</th>
-        <th style="padding:4px 5px;text-align:left;">规格尺寸</th>
-        <th style="padding:4px 5px;text-align:center;">张数</th>
-        <th style="padding:4px 5px;text-align:right;">成品量<br><span style="font-weight:400;font-size:0.65rem;">吨</span></th>
-        <th style="padding:4px 5px;text-align:right;">复材<br><span style="font-weight:400;font-size:0.65rem;">元</span></th>
-        <th style="padding:4px 5px;text-align:right;">基材<br><span style="font-weight:400;font-size:0.65rem;">元</span></th>
-        <th style="padding:4px 5px;text-align:right;">爆炸费<br><span style="font-weight:400;font-size:0.65rem;">元</span></th>
-        <th style="padding:4px 5px;text-align:right;">加工费<br><span style="font-weight:400;font-size:0.65rem;">前+后+包</span></th>
-        <th style="padding:4px 5px;text-align:right;">倒转费<br><span style="font-weight:400;font-size:0.65rem;">元</span></th>
-        <th style="padding:4px 5px;text-align:right;">废钢冲减<br><span style="font-weight:400;font-size:0.65rem;">元</span></th>
-        <th style="padding:4px 5px;text-align:right;background:#fbbf24;color:#78350f;">💰总成本<br><span style="font-weight:400;font-size:0.65rem;">元</span></th>
-        <th style="padding:4px 5px;text-align:right;">单位成本<br><span style="font-weight:400;font-size:0.65rem;">元/吨</span></th>
-        <th style="padding:4px 5px;text-align:right;">分摊合同<br><span style="font-weight:400;font-size:0.65rem;">元</span></th>
-        <th style="padding:4px 5px;text-align:right;background:#34d399;color:#022c22;">📈利润<br><span style="font-weight:400;font-size:0.65rem;">元</span></th>
-        <th style="padding:4px 5px;text-align:right;background:#a7f3d0;color:#065f46;">利润率</th>
-      </tr>
-      <!-- 第1行 -->
-      <tr style="background:#f0fdf4;">
-        <td style="padding:3px 5px;text-align:center;font-weight:700;">1</td>
-        <td style="padding:3px 5px;">2200×5750mm<br><span style="font-size:0.65rem;color:#6b7280;">面积151.80㎡·大板×1.3·批量×0.95</span></td>
-        <td style="padding:3px 5px;text-align:center;">12</td>
-        <td style="padding:3px 5px;text-align:right;">17.916</td>
-        <td style="padding:3px 5px;text-align:right;">133,791</td>
-        <td style="padding:3px 5px;text-align:right;">35,650</td>
-        <td style="padding:3px 5px;text-align:right;">26,996<br><span style="font-size:0.62rem;color:#059669;">178元/㎡</span></td>
-        <td style="padding:3px 5px;text-align:right;">36,101<br><span style="font-size:0.62rem;color:#6b7280;">前+后+包</span></td>
-        <td style="padding:3px 5px;text-align:right;">3,870</td>
-        <td style="padding:3px 5px;text-align:right;color:#dc2626;">-8,086</td>
-        <td style="padding:3px 5px;text-align:right;font-weight:700;background:#fef3c7;">228,322</td>
-        <td style="padding:3px 5px;text-align:right;">12,744</td>
-        <td style="padding:3px 5px;text-align:right;">587,701</td>
-        <td style="padding:3px 5px;text-align:right;font-weight:700;color:#059669;">359,379</td>
-        <td style="padding:3px 5px;text-align:right;font-weight:700;color:#059669;">61.1%</td>
-      </tr>
-      <!-- 第2行 -->
-      <tr style="background:#f5f3ff;">
-        <td style="padding:3px 5px;text-align:center;font-weight:700;">2</td>
-        <td style="padding:3px 5px;">2000×5750mm<br><span style="font-size:0.65rem;color:#6b7280;">面积23.00㎡·大板×1.3·无批量折扣</span></td>
-        <td style="padding:3px 5px;text-align:center;">2</td>
-        <td style="padding:3px 5px;text-align:right;">2.714</td>
-        <td style="padding:3px 5px;text-align:right;">20,267</td>
-        <td style="padding:3px 5px;text-align:right;">5,400</td>
-        <td style="padding:3px 5px;text-align:right;">4,306<br><span style="font-size:0.62rem;color:#7c3aed;">187元/㎡</span></td>
-        <td style="padding:3px 5px;text-align:right;">5,469</td>
-        <td style="padding:3px 5px;text-align:right;">487</td>
-        <td style="padding:3px 5px;text-align:right;color:#dc2626;">≈0</td>
-        <td style="padding:3px 5px;text-align:right;font-weight:700;background:#fef3c7;">35,930</td>
-        <td style="padding:3px 5px;text-align:right;">13,239</td>
-        <td style="padding:3px 5px;text:right;">89,028</td>
-        <td style="padding:3px 5px;text-align:right;font-weight:700;color:#059669;">53,098</td>
-        <td style="padding:3px 5px;text-align:right;font-weight:700;color:#059669;">59.6%</td>
-      </tr>
-      <!-- 第3行 -->
-      <tr style="background:#f0fdf4;">
-        <td style="padding:3px 5px;text-align:center;font-weight:700;">3</td>
-        <td style="padding:3px 5px;">850×5750mm<br><span style="font-size:0.65rem;color:#6b7280;">面积9.78㎡·小板×1.187·窄板×1.26</span></td>
-        <td style="padding:3px 5px;text-align:center;">2</td>
-        <td style="padding:3px 5px;text-align:right;">1.152</td>
-        <td style="padding:3px 5px;text-align:right;">8,603</td>
-        <td style="padding:3px 5px;text-align:right;">2,292</td>
-        <td style="padding:3px 5px;text-align:right;">1,671<br><span style="font-size:0.62rem;color:#059669;">171元/㎡</span></td>
-        <td style="padding:3px 5px;text-align:right;">2,321</td>
-        <td style="padding:3px 5px;text-align:right;">207</td>
-        <td style="padding:3px 5px;text-align:right;color:#dc2626;">≈0</td>
-        <td style="padding:3px 5px;text-align:right;font-weight:700;background:#fef3c7;">15,094</td>
-        <td style="padding:3px 5px;text-align:right;">13,103</td>
-        <td style="padding:3px 5px;text-align:right;">37,789</td>
-        <td style="padding:3px 5px;text-align:right;font-weight:700;color:#059669;">22,695</td>
-        <td style="padding:3px 5px;text-align:right;font-weight:700;color:#059669;">60.1%</td>
-      </tr>
-      <!-- 第4行 -->
-      <tr style="background:#f5f3ff;">
-        <td style="padding:3px 5px;text-align:center;font-weight:700;">4</td>
-        <td style="padding:3px 5px;">2300×4600mm<br><span style="font-size:0.65rem;color:#6b7280;">面积21.16㎡·大板×1.3·无批量折扣</span></td>
-        <td style="padding:3px 5px;text-align:center;">2</td>
-        <td style="padding:3px 5px;text-align:right;">2.498</td>
-        <td style="padding:3px 5px;text-align:right;">18,654</td>
-        <td style="padding:3px 5px;text-align:right;">4,971</td>
-        <td style="padding:3px 5px;text-align:right;">3,961<br><span style="font-size:0.62rem;color:#7c3aed;">187元/㎡</span></td>
-        <td style="padding:3px 5px;text-align:right;">5,033</td>
-        <td style="padding:3px 5px;text-align:right;">448</td>
-        <td style="padding:3px 5px;text-align:right;color:#dc2626;">≈0</td>
-        <td style="padding:3px 5px;text-align:right;font-weight:700;background:#fef3c7;">33,068</td>
-        <td style="padding:3px 5px;text-align:right;">13,238</td>
-        <td style="padding:3px 5px;text-align:right;">81,942</td>
-        <td style="padding:3px 5px;text-align:right;font-weight:700;color:#059669;">48,874</td>
-        <td style="padding:3px 5px;text-align:right;font-weight:700;color:#059669;">59.6%</td>
-      </tr>
-      <!-- 合计 -->
-      <tr style="background:#065f46;color:white;font-weight:700;font-size:0.78rem;">
-        <td style="padding:5px 5px;text-align:center;">合</td>
-        <td style="padding:5px 5px;">—</td>
-        <td style="padding:5px 5px;text-align:center;">18张</td>
-        <td style="padding:5px 5px;text-align:right;">24.280</td>
-        <td style="padding:5px 5px;text-align:right;">181,315</td>
-        <td style="padding:5px 5px;text-align:right;">48,313</td>
-        <td style="padding:5px 5px;text-align:right;">36,934</td>
-        <td style="padding:5px 5px;text-align:right;">48,924</td>
-        <td style="padding:5px 5px;text-align:right;">5,012</td>
-        <td style="padding:5px 5px;text-align:right;color:#fca5a5;">-8,086</td>
-        <td style="padding:5px 5px;text-align:right;background:#fbbf24;color:#78350f;">312,414</td>
-        <td style="padding:5px 5px;text-align:right;">—</td>
-        <td style="padding:5px 5px;text-align:right;">796,460</td>
-        <td style="padding:5px 5px;text-align:right;color:#6ee7b7;">484,046</td>
-        <td style="padding:5px 5px;text-align:right;color:#a7f3d0;">60.8%</td>
-      </tr>
-    </table>
-    <div style="margin-top:7px;padding:6px 10px;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;font-size:0.7rem;color:#92400e;">
-      <strong>⚠️ 提示：</strong>合同总价90万元（13%税率，不含税79.6万元，约32,800元/吨），利润率约61%——需确认：<br>
-      ① 实际合同单价是否正确？② 是否遗漏晶间腐蚀检测费（≈500~1500元/张）？③ 运输至济南费用是否含在合同内？
-    </div>
+<!-- 无订单占位提示 -->
+<div id="order-empty-hint" class="card" style="border:3px dashed #c4b5fd;margin-top:8px;background:#faf5ff;">
+  <div style="padding:16px;text-align:center;color:#9f7aea;font-size:0.82rem;">
+    💡 拖入图片/Excel，或填写下方手动表单，即可在此显示当前订单信息
   </div>
+</div>
+
+<!-- 动态各行成本对比表（calc() 后由 renderCostComparisonTable() 渲染） -->
+<div class="card" id="cost-comparison-card" style="border:3px solid #059669;margin-top:8px;">
+  <div class="card-header" id="cost-card-title" style="background:#059669;color:white;">💰 各行成本估算</div>
+  <div class="card-body" id="cost-card-body" style="padding:8px 12px;font-size:0.73rem;">
+    <div id="cost-table-placeholder" style="text-align:center;padding:24px;color:#9ca3af;font-size:0.8rem;">
+      📊 填写规格并计算后将在这里显示各行成本明细
+    </div>
+    <div class="table-scroll-wrap" id="cost-table-wrap" style="display:none;">
+      <table id="cost-detail-table" style="width:100%;border-collapse:collapse;min-width:700px;"></table>
+    </div>
+    <div id="cost-warn-box" style="display:none;margin-top:7px;padding:6px 10px;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;font-size:0.7rem;color:#92400e;"></div>
+  </div>
+</div>
 </div>
 
 <div class="container">
@@ -1923,6 +1813,211 @@ function renderExtractPreview(extracted) {
 }
 
 // ======================================================
+// 动态订单信息卡更新
+// ======================================================
+function updateOrderHeader() {
+  const card    = document.getElementById('order-info-card');
+  const empty   = document.getElementById('order-empty-hint');
+  if (!card) return;
+
+  const contract = document.getElementById('m-contract')?.value?.trim() || '';
+  const customer = document.getElementById('m-customer')?.value?.trim() || '';
+  const scenario = document.getElementById('product-type')?.value || '';
+
+  if (!contract && !customer) {
+    card.style.display = 'none';
+    if (empty) empty.style.display = '';
+    return;
+  }
+
+  const titleEl = document.getElementById('order-header-title');
+  if (titleEl) {
+    titleEl.textContent = `📋 当前订单：${customer || '未命名订单'}${contract ? '（' + contract + '）' : ''}`;
+  }
+
+  const setText = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val || '—';
+  };
+  setText('order-contract-no',  contract);
+  setText('order-customer',     customer);
+  setText('order-scenario',     scenario);
+
+  // 渲染明细表
+  const blastRows = document.querySelectorAll('.blast-spec-row');
+  const detailBox = document.getElementById('order-detail-box');
+  const detailTbl = document.getElementById('order-detail-table');
+  if (blastRows.length > 0) {
+    const thead = detailTbl.querySelector('thead');
+    const tbody = detailTbl.querySelector('tbody');
+    thead.innerHTML = `<tr style="background:#e9d5ff;font-size:0.72rem;">
+      <th style="padding:3px 6px;">#</th><th style="padding:3px 6px;">尺寸(mm)</th>
+      <th style="padding:3px 6px;">张数</th><th style="padding:3px 6px;">成品量(t)</th>
+    </tr>`;
+    let totalSheets = 0, totalTon = 0;
+    let html = '';
+    blastRows.forEach((row, i) => {
+      const l = parseFloat(row.querySelector('.bs-length')?.value) || 0;
+      const w = parseFloat(row.querySelector('.bs-width')?.value) || 0;
+      const c = parseInt(row.querySelector('.bs-count')?.value) || 0;
+      const f = parseFloat(row.querySelector('.bs-finished')?.value) || 0;
+      totalSheets += c; totalTon += f;
+      html += `<tr style="background:${i%2===0?'#f5f3ff':'#faf5ff'};">
+        <td style="padding:2px 6px;text-align:center;">${i+1}</td>
+        <td style="padding:2px 6px;">${l}×${w}</td>
+        <td style="padding:2px 6px;text-align:center;">${c}</td>
+        <td style="padding:2px 6px;text-align:right;">${f.toFixed(3)}</td>
+      </tr>`;
+    });
+    html += `<tr style="background:#7c3aed;color:white;font-weight:700;">
+      <td style="padding:2px 6px;">合</td><td style="padding:2px 6px;">—</td>
+      <td style="padding:2px 6px;text-align:center;">${totalSheets}张</td>
+      <td style="padding:2px 6px;text-align:right;">${totalTon.toFixed(3)}t</td>
+    </tr>`;
+    tbody.innerHTML = html;
+    document.getElementById('order-detail-summary').textContent =
+      `订单明细（共${blastRows.length}行/${totalSheets}张/${totalTon.toFixed(2)}吨）：`;
+    if (detailBox) detailBox.style.display = '';
+  }
+
+  card.style.display = '';
+  if (empty) empty.style.display = 'none';
+}
+
+// ======================================================
+// 动态各行成本对比表渲染
+// ======================================================
+function renderCostComparisonTable() {
+  const placeholder = document.getElementById('cost-table-placeholder');
+  const tableWrap    = document.getElementById('cost-table-wrap');
+  const tbl          = document.getElementById('cost-detail-table');
+  const titleEl      = document.getElementById('cost-card-title');
+  const warnBox      = document.getElementById('cost-warn-box');
+  const blastRows    = document.querySelectorAll('.blast-spec-row');
+  const contractAmt  = parseFloat(document.getElementById('contract-amount')?.value) || 0;
+
+  if (blastRows.length === 0) {
+    placeholder.style.display = '';
+    tableWrap.style.display = 'none';
+    warnBox.style.display = 'none';
+    return;
+  }
+
+  const fmtNum = n => n.toLocaleString('zh-CN', {maximumFractionDigits:0});
+  const fmtDec = n => n.toLocaleString('zh-CN', {maximumFractionDigits:2});
+  const cladNames = { ss304:'304', ss316l:'316L', ta2:'TA2', ni201:'Ni201', zircon:'锆702' };
+  const baseNames = { q345r:'Q345R', q355:'Q355', sa516:'SA516' };
+  const cladEl = document.getElementById('clad-mat');
+  const baseEl = document.getElementById('base-mat');
+  const customer = document.getElementById('m-customer')?.value || '';
+  const gradeEl  = document.querySelector('.g-btn.active');
+  const gradeTxt = gradeEl?.dataset?.g || '';
+
+  if (titleEl) {
+    const priceHint = contractAmt > 0 ? ` · 合同总价${(contractAmt/10000).toFixed(0)}万元/13%税率` : '';
+    titleEl.textContent = `💰 ${customer || '当前订单'} · 各行成本估算（${cladNames[cladEl?.value]||'?'}+${baseNames[baseEl?.value]||'?'} ${gradeTxt}）${priceHint}`;
+  }
+
+  const thead = `<tr style="background:#d1fae5;color:#065f46;font-size:0.72rem;">
+    <th style="padding:4px 5px;text-align:center;">行</th>
+    <th style="padding:4px 5px;text-align:left;">规格尺寸</th>
+    <th style="padding:4px 5px;text-align:center;">张数</th>
+    <th style="padding:4px 5px;text-align:right;">成品量(t)</th>
+    <th style="padding:4px 5px;text-align:right;">复材(元)</th>
+    <th style="padding:4px 5px;text-align:right;">基材(元)</th>
+    <th style="padding:4px 5px;text-align:right;">爆炸费(元)</th>
+    <th style="padding:4px 5px;text-align:right;">加工费(元)</th>
+    <th style="padding:4px 5px;text-align:right;">倒转费</th>
+    <th style="padding:4px 5px;text-align:right;">废钢冲减</th>
+    <th style="padding:4px 5px;text-align:right;background:#fbbf24;color:#78350f;">💰总成本</th>
+    <th style="padding:4px 5px;text-align:right;">元/吨</th>
+    <th style="padding:4px 5px;text-align:right;">分摊(元)</th>
+    <th style="padding:4px 5px;text-align:right;background:#34d399;color:#022c22;">📈利润</th>
+    <th style="padding:4px 5px;text-align:right;background:#a7f3d0;color:#065f46;">利润率</th>
+  </tr>`;
+
+  let tbodyHTML = '';
+  let totalSheets = 0, totalCost = 0, totalWeight = 0;
+  const contractNoTax = contractAmt / 1.13;
+
+  blastRows.forEach((row, i) => {
+    const length   = parseFloat(row.querySelector('.bs-length')?.value) || 0;
+    const width    = parseFloat(row.querySelector('.bs-width')?.value) || 0;
+    const count    = parseInt(row.querySelector('.bs-count')?.value) || 0;
+    const finished = parseFloat(row.querySelector('.bs-finished')?.value) || 0;
+    const cladAmt  = parseFloat(row.querySelector('.bs-clad-amt')?.textContent?.replace(/,/g,'')) || 0;
+    const baseAmt  = parseFloat(row.querySelector('.bs-base-amt')?.textContent?.replace(/,/g,'')) || 0;
+    const blastAmt = parseFloat(row.querySelector('.bs-blast-amt')?.textContent?.replace(/,/g,'')) || 0;
+    const procAmt  = parseFloat(row.querySelector('.bs-proc-amt')?.textContent?.replace(/,/g,'')) || 0;
+    const retAmt   = parseFloat(row.querySelector('.bs-ret-amt')?.textContent?.replace(/,/g,'')) || 0;
+    const scrapAmt = parseFloat(row.querySelector('.bs-scrap-amt')?.textContent?.replace(/,/g,'')) || 0;
+    const rowCost  = parseFloat(row.querySelector('.bs-cost')?.textContent?.replace(/,/g,'')) || 0;
+    const unitCost = finished > 0 ? rowCost / finished : 0;
+
+    totalSheets += count; totalCost += rowCost; totalWeight += finished;
+
+    const shareRatio = totalWeight > 0 ? finished / totalWeight : 1 / blastRows.length;
+    const shareContract = contractNoTax * shareRatio;
+    const profit = shareContract - rowCost;
+    const profitRate = shareContract > 0 ? profit / shareContract * 100 : 0;
+    const scrapColor = scrapAmt < 0 ? '#dc2626' : '#059669';
+    const scrapText  = scrapAmt >= 0 ? '≈0' : fmtNum(Math.round(scrapAmt));
+    const profitColor = profit >= 0 ? '#059669' : '#dc2626';
+
+    tbodyHTML += `<tr style="background:${i%2===0?'#f0fdf4':'#f5f3ff'};">
+      <td style="padding:3px 5px;text-align:center;font-weight:700;">${i+1}</td>
+      <td style="padding:3px 5px;">${length}×${width}mm</td>
+      <td style="padding:3px 5px;text-align:center;">${count}</td>
+      <td style="padding:3px 5px;text-align:right;">${fmtDec(finished)}</td>
+      <td style="padding:3px 5px;text-align:right;">${fmtNum(Math.round(cladAmt))}</td>
+      <td style="padding:3px 5px;text-align:right;">${fmtNum(Math.round(baseAmt))}</td>
+      <td style="padding:3px 5px;text-align:right;">${fmtNum(Math.round(blastAmt))}</td>
+      <td style="padding:3px 5px;text-align:right;">${fmtNum(Math.round(procAmt))}</td>
+      <td style="padding:3px 5px;text-align:right;">${fmtNum(Math.round(retAmt))}</td>
+      <td style="padding:3px 5px;text-align:right;color:${scrapColor};">${scrapText}</td>
+      <td style="padding:3px 5px;text-align:right;font-weight:700;background:#fef3c7;">${fmtNum(Math.round(rowCost))}</td>
+      <td style="padding:3px 5px;text-align:right;">${fmtNum(Math.round(unitCost))}</td>
+      <td style="padding:3px 5px;text-align:right;">${fmtNum(Math.round(shareContract))}</td>
+      <td style="padding:3px 5px;text-align:right;font-weight:700;color:${profitColor};">${fmtNum(Math.round(profit))}</td>
+      <td style="padding:3px 5px;text-align:right;font-weight:700;color:${profitColor};">${profitRate.toFixed(1)}%</td>
+    </tr>`;
+  });
+
+  const grandProfit = contractNoTax - totalCost;
+  const grandProfitRate = contractNoTax > 0 ? grandProfit / contractNoTax * 100 : 0;
+  tbodyHTML += `<tr style="background:#065f46;color:white;font-weight:700;font-size:0.78rem;">
+    <td style="padding:5px 5px;text-align:center;">合</td>
+    <td style="padding:5px 5px;">—</td>
+    <td style="padding:5px 5px;text-align:center;">${totalSheets}张</td>
+    <td style="padding:5px 5px;text-align:right;">${fmtDec(totalWeight)}</td>
+    <td style="padding:5px 5px;text-align:right;">—</td><td style="padding:5px 5px;text-align:right;">—</td>
+    <td style="padding:5px 5px;text-align:right;">—</td><td style="padding:5px 5px;text-align:right;">—</td>
+    <td style="padding:5px 5px;text-align:right;">—</td>
+    <td style="padding:5px 5px;text-align:right;">—</td>
+    <td style="padding:5px 5px;text-align:right;background:#fbbf24;color:#78350f;">${fmtNum(Math.round(totalCost))}</td>
+    <td style="padding:5px 5px;text-align:right;">—</td>
+    <td style="padding:5px 5px;text-align:right;">${fmtNum(Math.round(contractNoTax))}</td>
+    <td style="padding:5px 5px;text-align:right;color:${grandProfit>=0?'#6ee7b7':'#fca5a5'};">${fmtNum(Math.round(grandProfit))}</td>
+    <td style="padding:5px 5px;text-align:right;color:${grandProfitRate>=0?'#a7f3d0':'#fca5a5'};">${grandProfitRate.toFixed(1)}%</td>
+  </tr>`;
+
+  tbl.innerHTML = thead + '<tbody>' + tbodyHTML + '</tbody>';
+  placeholder.style.display = 'none';
+  tableWrap.style.display = '';
+
+  if (contractAmt > 0 && totalWeight > 0) {
+    const unitPrice = contractAmt / totalWeight / 1.13;
+    warnBox.innerHTML = `<strong>📋 摘要：</strong>合同含税<strong>${fmtNum(Math.round(contractAmt))}元</strong>（不含税${fmtNum(Math.round(contractNoTax))}元，约<strong>${fmtNum(Math.round(unitPrice))}元/吨</strong>），利润率约<strong>${grandProfitRate.toFixed(1)}%</strong>。`;
+    warnBox.style.display = '';
+  } else if (totalCost > 0) {
+    warnBox.innerHTML = `<strong>💡 提示：</strong>请填写「合同信息」区的合同总价，以查看利润率分析。`;
+    warnBox.style.display = '';
+  } else {
+    warnBox.style.display = 'none';
+  }
+}
+
+// ======================================================
 // 确认填入表单
 // ======================================================
 function applyExtracted() {
@@ -2010,6 +2105,9 @@ function applyExtracted() {
     btn.textContent = '✅ 确认填入表单';
     btn.style.background = '';
   }, 2500);
+
+  // 更新顶部动态订单信息卡
+  updateOrderHeader();
 }
 
 // ======================================================
@@ -2618,6 +2716,9 @@ function calc() {
 
   // 更新悬浮汇总Bar
   updateSummaryBar(totalCost, billableArea, prodQty, margin);
+
+  // 更新动态各行成本对比表
+  renderCostComparisonTable();
 }
 
 function drawBars(base, clad, front, blast, ret, back, pkg, scrap) {
@@ -3124,6 +3225,9 @@ function applyManualToCalculator() {
     btn.style.background = '#166534';
     setTimeout(() => { btn.textContent = '✅ 填入成本计算器'; btn.style.background = ''; }, 2500);
   }
+
+  // 更新顶部动态订单信息卡
+  updateOrderHeader();
 }
 
 // ======================================================
