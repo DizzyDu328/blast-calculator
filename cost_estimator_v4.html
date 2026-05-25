@@ -2337,29 +2337,145 @@ function extractFromExcelData(allData) {
 // ======================================================
 function renderExtractPreview(extracted) {
   const el = document.getElementById('extract-preview');
+  const container = document.getElementById('extract-items');
   el.classList.add('show');
 
   // 保存原始数据到全局变量
   window._extractedData = extracted;
 
-  document.getElementById('extract-items').innerHTML = extracted.fields.map((f, i) => {
+  // 如果有 products 数组，渲染表格
+  if (extracted.products && extracted.products.length > 0) {
+    renderProductTable(container, extracted);
+    return;
+  }
+
+  // 否则渲染扁平字段列表（OCR 识别结果）
+  container.innerHTML = extracted.fields.map((f, i) => {
     const isLow = f.lowConfidence || (f.confidence < 60 && !f.confirmed);
     return `
     <div class="ext-item" style="${isLow ? 'background:#fef3c7;border-radius:6px;padding:5px 8px;' : ''}">
       <span class="ext-label">${f.label}</span>
       <span class="ext-value">
-        <input type="text" 
-               id="ext-field-${i}" 
-               value="${f.value || ''}" 
+        <input type="text"
+               id="ext-field-${i}"
+               value="${f.value || ''}"
                placeholder="${f.value ? '' : '请输入'}"
                style="padding:4px 8px;border:1px solid ${isLow ? '#f59e0b' : '#d1d5db'};border-radius:4px;width:140px;font-size:13px;"
                onchange="updateExtractedField(${i}, this.value)"
-        />
-        ${isLow ? '<span class="unconfirmed" style="margin-left:5px;">⚠ 置信度低</span>' : 
+          />
+        ${isLow ? '<span class="unconfirmed" style="margin-left:5px;">⚠ 置信度低</span>' :
           (f.confirmed ? '<span class="confirmed" style="margin-left:5px;">✓</span>' : '<span class="unconfirmed" style="margin-left:5px;">⚠ 未识别</span>')}
       </span>
     </div>
   `}).join('');
+}
+
+// 渲染产品表格（多规格预览）
+function renderProductTable(container, extracted) {
+  const products = extracted.products;
+
+  let html = `<div style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:0.78rem;">
+      <thead>
+        <tr style="background:#dbeafe;color:#1e40af;">
+          <th style="padding:5px 6px;border:1px solid #bfdbfe;">#</th>
+          <th style="padding:5px 6px;border:1px solid #bfdbfe;">复层材质</th>
+          <th style="padding:5px 6px;border:1px solid #bfdbfe;">复层厚(mm)</th>
+          <th style="padding:5px 6px;border:1px solid #bfdbfe;">基层材质</th>
+          <th style="padding:5px 6px;border:1px solid #bfdbfe;">基层厚(mm)</th>
+          <th style="padding:5px 6px;border:1px solid #bfdbfe;">长度(mm)</th>
+          <th style="padding:5px 6px;border:1px solid #bfdbfe;">宽度(mm)</th>
+          <th style="padding:5px 6px;border:1px solid #bfdbfe;">数量</th>
+          <th style="padding:5px 6px;border:1px solid #bfdbfe;">单块重(t)</th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+  products.forEach((p, i) => {
+    const rowStyle = i % 2 === 0 ? 'background:#f9fafb;' : 'background:white;';
+    html += `<tr style="${rowStyle}">
+      <td style="padding:4px 6px;border:1px solid #e5e7eb;text-align:center;font-weight:600;">${p.index}</td>
+      <td style="padding:4px 6px;border:1px solid #e5e7eb;">
+        <input type="text" value="${p.复层材质}" data-idx="${i}" data-field="复层材质"
+               style="width:80px;padding:3px 5px;border:1px solid #d1d5db;border-radius:4px;font-size:0.78rem;"
+               onchange="onProductCellEdit(${i}, '复层材质', this.value)" />
+      </td>
+      <td style="padding:4px 6px;border:1px solid #e5e7eb;">
+        <input type="number" value="${p.复层厚度}" data-idx="${i}" data-field="复层厚度"
+               style="width:60px;padding:3px 5px;border:1px solid #d1d5db;border-radius:4px;font-size:0.78rem;"
+               onchange="onProductCellEdit(${i}, '复层厚度', this.value)" />
+      </td>
+      <td style="padding:4px 6px;border:1px solid #e5e7eb;">
+        <input type="text" value="${p.基层材质}" data-idx="${i}" data-field="基层材质"
+               style="width:80px;padding:3px 5px;border:1px solid #d1d5db;border-radius:4px;font-size:0.78rem;"
+               onchange="onProductCellEdit(${i}, '基层材质', this.value)" />
+      </td>
+      <td style="padding:4px 6px;border:1px solid #e5e7eb;">
+        <input type="number" value="${p.基层厚度}" data-idx="${i}" data-field="基层厚度"
+               style="width:60px;padding:3px 5px;border:1px solid #d1d5db;border-radius:4px;font-size:0.78rem;"
+               onchange="onProductCellEdit(${i}, '基层厚度', this.value)" />
+      </td>
+      <td style="padding:4px 6px;border:1px solid #e5e7eb;">
+        <input type="number" value="${p.长度mm}" data-idx="${i}" data-field="长度mm"
+               style="width:70px;padding:3px 5px;border:1px solid #d1d5db;border-radius:4px;font-size:0.78rem;"
+               onchange="onProductCellEdit(${i}, '长度mm', this.value)" />
+      </td>
+      <td style="padding:4px 6px;border:1px solid #e5e7eb;">
+        <input type="number" value="${p.宽度mm}" data-idx="${i}" data-field="宽度mm"
+               style="width:70px;padding:3px 5px;border:1px solid #d1d5db;border-radius:4px;font-size:0.78rem;"
+               onchange="onProductCellEdit(${i}, '宽度mm', this.value)" />
+      </td>
+      <td style="padding:4px 6px;border:1px solid #e5e7eb;">
+        <input type="number" value="${p.数量}" data-idx="${i}" data-field="数量"
+               style="width:50px;padding:3px 5px;border:1px solid #d1d5db;border-radius:4px;font-size:0.78rem;"
+               onchange="onProductCellEdit(${i}, '数量', this.value)" />
+      </td>
+      <td style="padding:4px 6px;border:1px solid #e5e7eb;">
+        <input type="number" value="${p.单块重量吨}" data-idx="${i}" data-field="单块重量吨" step="0.001"
+               style="width:70px;padding:3px 5px;border:1px solid #d1d5db;border-radius:4px;font-size:0.78rem;"
+               onchange="onProductCellEdit(${i}, '单块重量吨', this.value)" />
+      </td>
+    </tr>`;
+  });
+
+  const totalCount = products.reduce((s, p) => s + (p.数量 || 1), 0);
+  const totalWeight = products.reduce((s, p) => s + (p.单块重量吨 || 0) * (p.数量 || 1), 0);
+  html += `<tr style="background:#2563eb;color:white;font-weight:700;">
+    <td style="padding:5px 6px;border:1px solid #1d4ed;text-align:center;">合</td>
+    <td colspan="7" style="padding:5px 6px;border:1px solid #1d4ed;">共 ${products.length} 种规格 / ${totalCount} 张</td>
+    <td style="padding:5px 6px;border:1px solid #1d4ed;text-align:right;">${totalWeight.toFixed(3)} t</td>
+  </tr>`;
+
+  html += `</tbody></table></div>`;
+
+  // 同时显示扁平字段（客户名称、合同编号等）
+  if (extracted.fields && extracted.fields.length > 0) {
+    html += `<div style="margin-top:10px;border-top:1px solid #e5e7eb;padding-top:8px;">
+      <div style="font-size:0.78rem;font-weight:700;color:#374151;margin-bottom:5px;">📋 订单信息</div>`;
+    html += extracted.fields.map(f => `
+      <div style="display:flex;justify-content:space-between;font-size:0.78rem;padding:3px 0;border-bottom:1px dashed #f3f4f6;">
+        <span style="color:#6b7280;">${f.label}</span>
+        <span style="font-weight:600;color:#111827;">${f.value}</span>
+      </div>
+    `).join('');
+    html += `</div>`;
+  }
+
+  container.innerHTML = html;
+}
+
+// 产品表格单元格编辑回调（同步更新 _rawData）
+function onProductCellEdit(idx, field, value) {
+  if (window._extractedData && window._extractedData.products && window._extractedData.products[idx]) {
+    const p = window._extractedData.products[idx];
+    const parsed = ['复层厚度','基层厚度','长度mm','宽度mm','数量','单块重量吨'].includes(field)
+      ? (parseFloat(value) || 0) : value;
+    p[field] = parsed;
+    // 同步到 _rawData，确保确认填入时使用编辑后的值
+    if (window._extractedData._rawData && window._extractedData._rawData[idx]) {
+      window._extractedData._rawData[idx][field] = parsed;
+    }
+  }
 }
 
 // 更新提取字段的值
@@ -2404,36 +2520,29 @@ function parseAIPasteJson() {
     fields.push({ label: '合同编号', value: String(data['合同编号']), confidence: 95, confirmed: true });
   }
 
-  // 从产品列表中提取信息（取第一个产品的信息作为代表）
+  // 从产品列表中提取所有产品信息
+  const products = [];
   if (data['产品列表'] && data['产品列表'].length > 0) {
-    const first = data['产品列表'][0];
+    let totalWeight = 0;
 
-    if (first['复层材质']) {
-      fields.push({ label: '复层材质', value: String(first['复层材质']), confidence: 95, confirmed: true });
-    }
-    if (first['复层厚度']) {
-      fields.push({ label: '复层厚度', value: String(first['复层厚度']), confidence: 95, confirmed: true });
-    }
-    if (first['基层材质']) {
-      fields.push({ label: '基材材质', value: String(first['基层材质']), confidence: 95, confirmed: true });
-    }
-    if (first['基层厚度']) {
-      fields.push({ label: '基层厚度', value: String(first['基层厚度']), confidence: 95, confirmed: true });
-    }
-    if (first['长度mm']) {
-      fields.push({ label: '单块长度', value: String(first['长度mm']), confidence: 95, confirmed: true });
-    }
-    if (first['宽度mm']) {
-      fields.push({ label: '单块宽度', value: String(first['宽度mm']), confidence: 95, confirmed: true });
-    }
-    if (first['数量']) {
-      fields.push({ label: '数量', value: String(first['数量']), confidence: 95, confirmed: true });
-    }
+    data['产品列表'].forEach((p, idx) => {
+      products.push({
+        index: idx + 1,
+        复层材质: p['复层材质'] || '',
+        复层厚度: p['复层厚度'] || 0,
+        基层材质: p['基层材质'] || '',
+        基层厚度: p['基层厚度'] || 0,
+        长度mm: p['长度mm'] || 0,
+        宽度mm: p['宽度mm'] || 0,
+        数量: p['数量'] || 1,
+        单块重量吨: p['单块重量吨'] || 0,
+      });
+      totalWeight += (p['单块重量吨'] || 0) * (p['数量'] || 1);
+    });
 
-    // 计算成品重量（所有产品单块重量之和）
-    const totalWeight = data['产品列表'].reduce((sum, p) => sum + (p['单块重量吨'] || 0) * (p['数量'] || 1), 0);
+    // 只添加一个总重量摘要字段
     if (totalWeight > 0) {
-      fields.push({ label: '成品重量', value: totalWeight.toFixed(3), confidence: 95, confirmed: true });
+      fields.push({ label: '成品重量', value: totalWeight.toFixed(3) + ' 吨（共' + products.length + '种规格）', confidence: 95, confirmed: true });
     }
   }
 
@@ -2442,15 +2551,16 @@ function parseAIPasteJson() {
     fields.push({ label: '技术要求', value: String(data['备注']), confidence: 90, confirmed: false });
   }
 
-  if (fields.length === 0) {
+  if (fields.length === 0 && products.length === 0) {
     errEl.textContent = '⚠️ 未能从 JSON 中提取到有效字段，请检查格式';
     errEl.style.display = 'block';
     return;
   }
 
   // 生成提取结果
-  const extracted = { fields };
+  const extracted = { fields, products };
   window._extractedData = extracted;
+  if (data['产品列表']) window._extractedData._rawData = data['产品列表'];
   
   // 图片识别成功，清除手动输入区
   clearManualSection();
