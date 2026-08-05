@@ -51,6 +51,7 @@ const App = {
   },
 
   init() {
+    this.bindEvents();
     const user = AUTH.check();
     if (!user) {
       this.showLogin();
@@ -68,7 +69,6 @@ const App = {
     document.getElementById('loginPage').classList.add('hidden');
     document.getElementById('appPage').classList.remove('hidden');
     document.getElementById('userName').textContent = user.name;
-    this.bindEvents();
   },
 
   bindEvents() {
