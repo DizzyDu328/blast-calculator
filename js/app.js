@@ -14,7 +14,7 @@ const AUTH = {
   login(username, password) {
     const user = this.credentials[username];
     if (user && user.password === password) {
-      const token = btoa(JSON.stringify({ username, name: user.name, ts: Date.now() }));
+      const token = JSON.stringify({ username, name: user.name, ts: Date.now() });
       sessionStorage.setItem('auth_token', token);
       return { success: true, name: user.name };
     }
@@ -30,8 +30,7 @@ const AUTH = {
     const token = sessionStorage.getItem('auth_token');
     if (!token) return null;
     try {
-      const data = JSON.parse(atob(token));
-      return data;
+      return JSON.parse(token);
     } catch {
       return null;
     }
