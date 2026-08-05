@@ -7,11 +7,15 @@
 
 // 复层材料密度 (g/cm³)
 const CLADDING_DENSITY = {
-  // 不锈钢
+  // 不锈钢 (标准牌号)
   'S31603': 8.0, 'S31608': 8.0, 'S30403': 8.0, 'S30408': 8.0,
   'S31008': 8.0, 'S39042': 8.0, 'S31703': 8.0,
+  // 不锈钢 (常用别名)
+  '304': 8.0, '304L': 8.0, '316': 8.0, '316L': 8.0,
+  '321': 8.0, '310S': 8.0, '309S': 8.0, '316TI': 8.0,
   // 双相不锈钢
   'S32205': 7.8, 'S32750': 7.8, 'S32101': 7.8,
+  '2205': 7.8, '2507': 7.8, '2304': 7.8,
   // 钛及钛合金
   'TA1': 4.51, 'TA2': 4.51, 'TA9': 4.51, 'TA10': 4.51,
   // 镍基合金
@@ -33,8 +37,13 @@ const MATERIAL_CATEGORY = {
   'S31603': 'austenitic', 'S31608': 'austenitic', 'S30403': 'austenitic',
   'S30408': 'austenitic', 'S31008': 'austenitic', 'S31703': 'austenitic',
   'S39042': 'austenitic',
+  // 奥氏体不锈钢 (常用别名)
+  '304': 'austenitic', '304L': 'austenitic', '316': 'austenitic',
+  '316L': 'austenitic', '321': 'austenitic', '310S': 'austenitic',
+  '309S': 'austenitic', '316TI': 'austenitic',
   // 双相不锈钢
   'S32205': 'duplex', 'S32750': 'duplex', 'S32101': 'duplex',
+  '2205': 'duplex', '2507': 'duplex', '2304': 'duplex',
   // 钛及钛合金
   'TA1': 'titanium', 'TA2': 'titanium', 'TA9': 'titanium', 'TA10': 'titanium',
   // 镍基合金 & 铜合金
@@ -211,6 +220,7 @@ function calculateCost(input) {
     stainlessSteelPrice: AF = 0,
     quotationPerTon: AP = 0,
     explosionPrice: AD,
+    isCircular = false,
   } = input;
 
   // 密度
@@ -219,6 +229,12 @@ function calculateCost(input) {
 
   // 爆炸单价 (查表)
   const explosionPrice = AD || getExplosionPrice(D, grade);
+
+  // 圆形板面积计算 (mm²)
+  const circleArea = (d) => Math.PI * (d / 2) * (d / 2);
+
+  // 成品面积: 圆形板用 π*r², 矩形板用 宽*长
+  const finishedArea_mm2 = isCircular ? circleArea(H) : H * I;
 
   // ========== 尺寸计算 ==========
   const C = D + F;                    // 总厚度 mm
@@ -230,21 +246,21 @@ function calculateCost(input) {
   const Q = I + P;                    // 复层采购长度 mm
 
   // ========== 面积计算 ==========
-  const T = K * O / 1000000;          // 单板爆炸面积 ㎡
-  const U = H * I / 1000000;          // 单板成品面积 ㎡
+  const T = K * O / 1000000;          // 单板爆炸面积 ㎡ (采购尺寸, 始终矩形)
+  const U = finishedArea_mm2 / 1000000; // 单板成品面积 ㎡ (圆形板用π*r²)
   const V = U * S;                     // 成品总面积 ㎡
 
   // ========== 重量计算 ==========
-  // W: 采购基层单重 (吨) = 7.85 * G * K * O / 1e9
+  // W: 采购基层单重 (吨) = 7.85 * G * K * O / 1e9 (采购尺寸, 始终矩形)
   const W = Math.round(baseDensity * G * K * O / 1000000000 * 1000) / 1000;
-  // X: 采购复层单重 (吨) = E * M * Q * R / 1e9
+  // X: 采购复层单重 (吨) = E * M * Q * R / 1e9 (采购尺寸, 始终矩形)
   const X = Math.round(E * M * Q * R / 1000000000 * 1000) / 1000;
   // Y: 采购单重 (吨)
   const Y = W + X;
-  // Z: 成品基层单重 (吨) = 7.85 * F * H * I / 1e9
-  const Z = Math.round(baseDensity * F * H * I / 1000000000 * 1000) / 1000;
-  // AA: 成品复层单重 (吨) = D * H * I * R / 1e9
-  const AA = Math.round(D * H * I * R / 1000000000 * 1000) / 1000;
+  // Z: 成品基层单重 (吨) = 7.85 * F * 成品面积 / 1e9 (圆形板用π*r²)
+  const Z = Math.round(baseDensity * F * finishedArea_mm2 / 1000000000 * 1000) / 1000;
+  // AA: 成品复层单重 (吨) = D * 成品面积 * R / 1e9 (圆形板用π*r²)
+  const AA = Math.round(D * finishedArea_mm2 * R / 1000000000 * 1000) / 1000;
   // AB: 成品单重 (吨)
   const AB = Z + AA;
   // AC: 成品总重 (吨)
@@ -296,6 +312,7 @@ function calculateCost(input) {
       width: H,
       length: I,
       sheets: S,
+      isCircular,
       purchaseCladdingThickness: E,
       purchaseBaseThickness: G,
       carbonSteelPrice: AE,

@@ -194,20 +194,24 @@ const App = {
       return;
     }
 
-    container.innerHTML = this.parsedItems.map((item, idx) => `
+    container.innerHTML = this.parsedItems.map((item, idx) => {
+      const dimText = item.isCircular
+        ? `<div class="item-field"><span class="label">直径:</span><span class="value">Ф${item.diameter || item.width}mm (圆形)</span></div>`
+        : `<div class="item-field"><span class="label">宽度:</span><span class="value">${item.width}mm</span></div>
+           <div class="item-field"><span class="label">长度:</span><span class="value">${item.length}mm</span></div>`;
+      return `
       <div class="parsed-item">
         <div class="item-index">${idx + 1}</div>
         <div class="item-content">
           <div class="item-field"><span class="label">牌号:</span><span class="value">${item.grade}</span></div>
           <div class="item-field"><span class="label">复层厚度:</span><span class="value">${item.claddingThickness}mm</span></div>
           <div class="item-field"><span class="label">基层厚度:</span><span class="value">${item.baseThickness}mm</span></div>
-          <div class="item-field"><span class="label">宽度:</span><span class="value">${item.width}mm</span></div>
-          <div class="item-field"><span class="label">长度:</span><span class="value">${item.length}mm</span></div>
+          ${dimText}
           <div class="item-field"><span class="label">张数:</span><span class="value">${item.sheets}张</span></div>
         </div>
         <button class="btn btn-sm btn-danger" onclick="App.removeItem(${idx})">删除</button>
       </div>
-    `).join('');
+    `;}).join('');
   },
 
   removeItem(idx) {
@@ -328,14 +332,17 @@ const App = {
     tbody.innerHTML = this.results.map((r, idx) => {
       const profitClass = r.profit.grossProfitPerTon >= 0 ? 'badge-green' : 'badge-red';
       const profitText = r.profit.grossProfitPerTon >= 0 ? '盈利' : '亏损';
+      const shapeIcon = r.input.isCircular ? ' <span class="badge badge-blue">圆</span>' : '';
+      const dimText = r.input.isCircular
+        ? `Ф${r.input.width}`
+        : `${r.input.width}×${r.input.length}`;
       return `
         <tr>
           <td>${idx + 1}</td>
-          <td><strong>${r.input.grade}</strong></td>
+          <td><strong>${r.input.grade}</strong>${shapeIcon}</td>
           <td class="num">${r.input.claddingThickness}</td>
           <td class="num">${r.input.baseThickness}</td>
-          <td class="num">${r.input.width}</td>
-          <td class="num">${r.input.length}</td>
+          <td class="num" colspan="2">${dimText}</td>
           <td class="num">${r.input.sheets}</td>
           <td class="num">${r.weight.finishedUnitWeight.toFixed(3)}</td>
           <td class="num">${r.weight.finishedTotalWeight.toFixed(3)}</td>
@@ -370,12 +377,13 @@ const App = {
         <div class="detail-title">基本信息</div>
         <table class="data-table">
           <tr><td>牌号</td><td>${r.input.grade}</td></tr>
+          <tr><td>形状</td><td>${r.input.isCircular ? '圆形板' : '矩形板'}</td></tr>
           <tr><td>复层材料</td><td>${r.input.claddingMaterial}</td></tr>
           <tr><td>基层材料</td><td>${r.input.baseMaterial}</td></tr>
           <tr><td>总厚度</td><td>${r.input.totalThickness} mm</td></tr>
           <tr><td>复层厚度 / 采购厚度</td><td>${r.input.claddingThickness} / ${r.input.purchaseCladdingThickness} mm</td></tr>
           <tr><td>基层厚度 / 采购厚度</td><td>${r.input.baseThickness} / ${r.input.purchaseBaseThickness} mm</td></tr>
-          <tr><td>宽度 x 长度</td><td>${r.input.width} x ${r.input.length} mm</td></tr>
+          <tr><td>${r.input.isCircular ? '直径' : '宽度 × 长度'}</td><td>${r.input.isCircular ? 'Ф' + r.input.width + ' mm' : r.input.width + ' × ' + r.input.length + ' mm'}</td></tr>
           <tr><td>张数</td><td>${r.input.sheets} 张</td></tr>
         </table>
       </div>
@@ -393,8 +401,8 @@ const App = {
       <div class="detail-section">
         <div class="detail-title">面积与重量</div>
         <table class="data-table">
-          <tr><td>单板爆炸面积</td><td>${r.area.explosionAreaPerSheet.toFixed(3)} ㎡</td></tr>
-          <tr><td>单板成品面积</td><td>${r.area.finishedAreaPerSheet.toFixed(3)} ㎡</td></tr>
+          <tr><td>单板爆炸面积</td><td>${r.area.explosionAreaPerSheet.toFixed(3)} ㎡ ${r.input.isCircular ? '(矩形采购面)' : ''}</td></tr>
+          <tr><td>单板成品面积</td><td>${r.area.finishedAreaPerSheet.toFixed(3)} ㎡ ${r.input.isCircular ? '(π·r²)' : ''}</td></tr>
           <tr><td>成品总面积</td><td>${r.area.totalFinishedArea.toFixed(3)} ㎡</td></tr>
           <tr><td>采购基层单重</td><td>${r.weight.purchaseBaseWeight.toFixed(3)} 吨</td></tr>
           <tr><td>采购复层单重</td><td>${r.weight.purchaseCladdingWeight.toFixed(3)} 吨</td></tr>
