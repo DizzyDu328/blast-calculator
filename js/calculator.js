@@ -668,6 +668,548 @@ function calculateCost(input) {
   return result;
 }
 
+// ========== 拼焊/倍尺方案设计 ==========
+
+/**
+ * 设计拼焊/倍尺方案
+ * @param {Object} input - 成品参数 (grade, claddingThickness, baseThickness, width, length, sheets, isCircular, options)
+ * @returns {Object} 方案设计结果
+ */
+function designLayoutPlan(input) {
+  const design = designRawMaterial(input);
+  const { grade, width: H, length: I, sheets: S, isCircular } = design.input;
+  const M = design.rawMaterial.claddingPurchaseWidth;
+  const Q = design.rawMaterial.claddingPurchaseLength;
+  const K = design.rawMaterial.basePurchaseWidth;
+  const O = design.rawMaterial.basePurchaseLength;
+
+  const claddingMat = getCladdingMaterial(grade);
+  const category = MATERIAL_CATEGORY[claddingMat] || 'austenitic';
+  const isStainless = category !== 'titanium';
+
+  // 判断是否需要拼焊
+  const needsWelding = isStainless && M > 2500;
+  // 判断是否需要倍尺 (采购长度超过8000 或多张小板可合并节省材料)
+  const needsMultiBlank = !isCircular && (O > MAX_PURCHASE_LENGTH || (S > 1 && I <= 4000));
+
+  const plans = [];
+
+  // ---- 拼焊方案 ----
+  if (needsWelding) {
+    const weldPlan = designWeldingPlan(M, Q, H, I);
+    if (weldPlan) {
+      const weldLength_m = weldPlan.totalWeldLength / 1000;
+      const weldCost = Math.round(weldLength_m * PROCESSING_FEES.welding.price);
+      plans.push({
+        type: 'welding',
+        title: '拼焊方案',
+        reason: `覆层采购宽度 ${M}mm 超过最大标准宽度 2500mm`,
+        ...weldPlan,
+        weldLength_m: weldLength_m.toFixed(1),
+        weldCost: weldCost,
+        weldPricePerM: PROCESSING_FEES.welding.price,
+      });
+    }
+  }
+
+  // ---- 倍尺方案 ----
+  if (needsMultiBlank && !isCircular) {
+    const multiPlan = designMultiBlankPlan(H, I, S, K, O, M, Q);
+    if (multiPlan && multiPlan.best) {
+      // 仅在以下情况展示倍尺方案：
+      // 1. 采购长度超过最大长度（必须倍尺）
+      // 2. 排列数 > 1 且节省率 > 0（有实际节省）
+      const mustSplit = O > MAX_PURCHASE_LENGTH;
+      const hasSaving = multiPlan.best.perPlate > 1 && parseFloat(multiPlan.best.savingRate) > 0;
+      if (mustSplit || hasSaving) {
+        plans.push({
+          type: 'multiblank',
+          title: '倍尺方案',
+          reason: mustSplit
+            ? `基层采购长度 ${O}mm 超过最大长度 ${MAX_PURCHASE_LENGTH}mm，需倍尺排列`
+            : `${S}张成品可合并排列以节省材料`,
+          ...multiPlan,
+        });
+      }
+    }
+  }
+
+  // ---- 无需特殊方案 ----
+  if (plans.length === 0) {
+    plans.push({
+      type: 'none',
+      title: '标准方案',
+      reason: '采购尺寸符合标准，无需拼焊或倍尺',
+    });
+  }
+
+  return {
+    input: design.input,
+    rawMaterial: design.rawMaterial,
+    margins: design.margins,
+    plans,
+    warnings: design.warnings,
+  };
+}
+
+/**
+ * 拼焊方案：将覆层采购宽度拆分为标准宽度条带
+ */
+function designWeldingPlan(purchaseWidth, purchaseLength, finishedWidth, finishedLength) {
+  // 尝试不同的条带数量
+  const maxStrips = 4;
+  let bestPlan = null;
+
+  for (let n = 2; n <= maxStrips; n++) {
+    const plan = tryWeldingSplit(purchaseWidth, purchaseLength, n);
+    if (plan && (!bestPlan || plan.score < bestPlan.score)) {
+      bestPlan = plan;
+    }
+  }
+
+  if (!bestPlan) return null;
+
+  // 计算焊缝位置 (从覆层成品区起算)
+  const strips = bestPlan.strips;
+  let cumWidth = 0;
+  const weldPositions = [];
+  for (let i = 0; i < strips.length - 1; i++) {
+    cumWidth += strips[i].actualWidth;
+    weldPositions.push(Math.round(cumWidth));
+  }
+
+  // 焊缝总长 = (条带数-1) × 采购长度
+  const totalWeldLength = (strips.length - 1) * purchaseLength;
+
+  return {
+    stripCount: strips.length,
+    strips,
+    weldPositions,
+    totalWeldLength,
+    wasteWidth: bestPlan.wasteWidth,
+    wasteArea: bestPlan.wasteWidth * purchaseLength / 1000000,
+    score: bestPlan.score,
+  };
+}
+
+/**
+ * 尝试将宽度拆分为n条标准宽度条带
+ */
+function tryWeldingSplit(targetWidth, purchaseLength, n) {
+  // 每条带宽度
+  const stripWidth = targetWidth / n;
+  
+  // 找到 >= stripWidth 的最小标准宽度
+  const standardWidths = STANDARD_STAINLESS_WIDTHS;
+  let bestStdWidth = null;
+  let minWaste = Infinity;
+
+  for (const sw of standardWidths) {
+    if (sw >= stripWidth - 1) { // 允许1mm容差
+      const waste = sw * n - targetWidth;
+      if (waste < minWaste) {
+        minWaste = waste;
+        bestStdWidth = sw;
+      }
+    }
+  }
+
+  if (!bestStdWidth) return null;
+
+  // 构建条带列表
+  const strips = [];
+  let remaining = targetWidth;
+  for (let i = 0; i < n; i++) {
+    if (i === n - 1) {
+      // 最后一条带用剩余宽度
+      strips.push({
+        index: i + 1,
+        standardWidth: bestStdWidth,
+        actualWidth: Math.round(remaining),
+        wasteWidth: bestStdWidth - Math.round(remaining),
+      });
+    } else {
+      const w = Math.round(targetWidth / n);
+      strips.push({
+        index: i + 1,
+        standardWidth: bestStdWidth,
+        actualWidth: w,
+        wasteWidth: bestStdWidth - w,
+      });
+      remaining -= w;
+    }
+  }
+
+  const totalWaste = bestStdWidth * n - targetWidth;
+  const score = n * 1000 + totalWaste; // 优先少条带，其次少废料
+
+  return {
+    strips,
+    wasteWidth: Math.round(totalWaste),
+    score,
+  };
+}
+
+/**
+ * 倍尺方案：多张成品排列在同一基板上
+ */
+function designMultiBlankPlan(finishedW, finishedL, sheets, basePW, basePL, cladPW, cladPL) {
+  // 尝试不同的排列方式
+  const options = [];
+  const margins = { baseW: 40, baseL: 40, cutGap: 10 };
+
+  // 尝试沿长度方向排列 (1×N)
+  for (let n = 2; n <= Math.min(sheets, 6); n++) {  // n从2开始，1×1不是倍尺
+    const totalL = n * finishedL + (n - 1) * margins.cutGap + 2 * margins.baseL;
+    if (totalL <= MAX_PURCHASE_LENGTH) {
+      const plateW = basePW;
+      const plateL = Math.round(totalL);
+      const plateArea = plateW * plateL / 1000000;
+      const individualArea = basePW * basePL * n / 1000000;
+      const saving = (individualArea - plateArea);
+      const savingRate = individualArea > 0 ? saving / individualArea : 0;
+      const platesNeeded = Math.ceil(sheets / n);
+
+      options.push({
+        arrangement: `1×${n}`,
+        cols: 1,
+        rows: n,
+        perPlate: n,
+        platesNeeded,
+        plateWidth: plateW,
+        plateLength: plateL,
+        plateArea: plateArea.toFixed(2),
+        individualArea: individualArea.toFixed(2),
+        savingArea: saving.toFixed(2),
+        savingRate: (savingRate * 100).toFixed(1),
+        cutCount: n,
+        score: platesNeeded * 10000 - savingRate * 100,
+      });
+    }
+  }
+
+  // 尝试沿宽度方向排列 (N×1)
+  for (let n = 2; n <= Math.min(sheets, 4); n++) {
+    const totalW = n * finishedW + (n - 1) * margins.cutGap + 2 * margins.baseW;
+    if (totalW <= 2500) {
+      const plateW = Math.round(totalW);
+      const plateL = basePL;
+      const plateArea = plateW * plateL / 1000000;
+      const individualArea = basePW * basePL * n / 1000000;
+      const saving = individualArea - plateArea;
+      const savingRate = individualArea > 0 ? saving / individualArea : 0;
+      const platesNeeded = Math.ceil(sheets / n);
+
+      options.push({
+        arrangement: `${n}×1`,
+        cols: n,
+        rows: 1,
+        perPlate: n,
+        platesNeeded,
+        plateWidth: plateW,
+        plateLength: plateL,
+        plateArea: plateArea.toFixed(2),
+        individualArea: individualArea.toFixed(2),
+        savingArea: saving.toFixed(2),
+        savingRate: (savingRate * 100).toFixed(1),
+        cutCount: n,
+        score: platesNeeded * 10000 - savingRate * 100,
+      });
+    }
+  }
+
+  // 尝试网格排列 (M×N)
+  for (let cols = 2; cols <= 3; cols++) {
+    for (let rows = 2; rows <= 4; rows++) {
+      const totalW = cols * finishedW + (cols - 1) * margins.cutGap + 2 * margins.baseW;
+      const totalL = rows * finishedL + (rows - 1) * margins.cutGap + 2 * margins.baseL;
+      if (totalW <= 2500 && totalL <= MAX_PURCHASE_LENGTH) {
+        const perPlate = cols * rows;
+        if (perPlate > sheets) continue;
+        const plateW = Math.round(totalW);
+        const plateL = Math.round(totalL);
+        const plateArea = plateW * plateL / 1000000;
+        const individualArea = basePW * basePL * perPlate / 1000000;
+        const saving = individualArea - plateArea;
+        const savingRate = individualArea > 0 ? saving / individualArea : 0;
+        const platesNeeded = Math.ceil(sheets / perPlate);
+
+        options.push({
+          arrangement: `${cols}×${rows}`,
+          cols,
+          rows,
+          perPlate,
+          platesNeeded,
+          plateWidth: plateW,
+          plateLength: plateL,
+          plateArea: plateArea.toFixed(2),
+          individualArea: individualArea.toFixed(2),
+          savingArea: saving.toFixed(2),
+          savingRate: (savingRate * 100).toFixed(1),
+          cutCount: cols * rows,
+          score: platesNeeded * 10000 - savingRate * 100,
+        });
+      }
+    }
+  }
+
+  if (options.length === 0) return null;
+
+  // 过滤掉节省率为负的选项（除非是因为长度超限必须倍尺）
+  const hasPositiveSaving = options.some(o => parseFloat(o.savingRate) > 0);
+  let filtered = hasPositiveSaving
+    ? options.filter(o => parseFloat(o.savingRate) > 0)
+    : options;
+
+  // 选择最优方案：最少基板数 + 最大节省率
+  filtered.sort((a, b) => a.score - b.score);
+  const best = filtered[0];
+  const allOptions = filtered.slice(0, 3); // 返回前3个方案
+
+  return { best, allOptions };
+}
+
+/**
+ * 生成拼焊布局SVG图纸
+ */
+function generateWeldingDrawing(plan, rawMaterial, inputInfo) {
+  const M = rawMaterial.claddingPurchaseWidth || 0;
+  const Q = rawMaterial.claddingPurchaseLength || 0;
+  const K = rawMaterial.basePurchaseWidth || 0;
+  const O = rawMaterial.basePurchaseLength || 0;
+  const H = (inputInfo && inputInfo.width) || 0;
+  const I = (inputInfo && inputInfo.length) || 0;
+  const isCircular = (inputInfo && inputInfo.isCircular) || false;
+
+  if (plan.type === 'welding' && plan.strips) {
+    return generateWeldingSVG(plan, M, Q, K, O, H, I);
+  } else if (plan.type === 'multiblank' && plan.best) {
+    return generateMultiBlankSVG(plan.best, H, I, K, O);
+  } else if (plan.type === 'none') {
+    return generateStandardSVG(M, Q, K, O, H, I, isCircular);
+  }
+  return '';
+}
+
+/**
+ * 拼焊SVG图纸
+ */
+function generateWeldingSVG(plan, M, Q, K, O, H, I) {
+  const padding = 60;
+  const labelOffset = 30;
+  const maxW = 600;
+  const maxH = 400;
+  const scale = Math.min((maxW - 2 * padding) / Math.max(M, K), (maxH - 2 * padding) / Math.max(Q, O));
+  const w = Math.max(M, K) * scale + 2 * padding;
+  const h = Math.max(Q, O) * scale + 2 * padding + labelOffset;
+  const ox = padding;
+  const oy = padding;
+
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" style="width:100%;max-width:600px;">`;
+  svg += `<defs><pattern id="weldHatch" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">
+    <line x1="0" y1="0" x2="0" y2="6" stroke="#dc2626" stroke-width="1" opacity="0.5"/>
+  </pattern></defs>`;
+
+  // 基层 (外框)
+  const baseW = K * scale;
+  const baseH = O * scale;
+  const baseX = ox + (M * scale - baseW) / 2;
+  const baseY = oy + (Q * scale - baseH) / 2;
+  svg += `<rect x="${baseX}" y="${baseY}" width="${baseW}" height="${baseH}" fill="#dbeafe" stroke="#3b82f6" stroke-width="2" rx="2"/>`;
+  svg += `<text x="${baseX + baseW/2}" y="${baseY - 6}" text-anchor="middle" font-size="11" fill="#1e40af" font-weight="600">基层 ${K}×${O}mm</text>`;
+
+  // 覆层条带
+  let cumX = ox;
+  const cladH = Q * scale;
+  plan.strips.forEach((strip, idx) => {
+    const sw = strip.actualWidth * scale;
+    const colors = ['#10b981', '#059669', '#047857', '#065f46'];
+    const fill = colors[idx % colors.length];
+    svg += `<rect x="${cumX}" y="${oy}" width="${sw}" height="${cladH}" fill="${fill}" fill-opacity="0.3" stroke="${fill}" stroke-width="1.5" rx="1"/>`;
+    // 条带编号
+    svg += `<text x="${cumX + sw/2}" y="${oy + cladH/2}" text-anchor="middle" font-size="12" fill="${fill}" font-weight="700">${strip.index}</text>`;
+    // 条带宽度标注
+    svg += `<text x="${cumX + sw/2}" y="${oy + cladH + 14}" text-anchor="middle" font-size="9" fill="#374151">${strip.actualWidth}mm</text>`;
+    // 标准宽度
+    svg += `<text x="${cumX + sw/2}" y="${oy + cladH + 26}" text-anchor="middle" font-size="8" fill="#9ca3af">(标准${strip.standardWidth})</text>`;
+    cumX += sw;
+  });
+
+  // 焊缝线
+  let weldX = ox;
+  plan.strips.forEach((strip, idx) => {
+    if (idx < plan.strips.length - 1) {
+      weldX += strip.actualWidth * scale;
+      svg += `<line x1="${weldX}" y1="${oy}" x2="${weldX}" y2="${oy + cladH}" stroke="#dc2626" stroke-width="3" stroke-dasharray="6,3"/>`;
+      svg += `<rect x="${weldX-3}" y="${oy}" width="6" height="${cladH}" fill="url(#weldHatch)" opacity="0.6"/>`;
+      // 焊缝标注
+      svg += `<text x="${weldX + 5}" y="${oy + 16}" font-size="9" fill="#dc2626" font-weight="600">焊缝${idx+1}</text>`;
+    }
+  });
+
+  // 尺寸标注 - 总宽度
+  const dimY = oy + cladH + 40;
+  svg += `<line x1="${ox}" y1="${dimY}" x2="${ox + M*scale}" y2="${dimY}" stroke="#6b7280" stroke-width="1"/>`;
+  svg += `<line x1="${ox}" y1="${dimY-4}" x2="${ox}" y2="${dimY+4}" stroke="#6b7280" stroke-width="1"/>`;
+  svg += `<line x1="${ox + M*scale}" y1="${dimY-4}" x2="${ox + M*scale}" y2="${dimY+4}" stroke="#6b7280" stroke-width="1"/>`;
+  svg += `<text x="${ox + M*scale/2}" y="${dimY + 14}" text-anchor="middle" font-size="11" fill="#374151" font-weight="600">覆层总宽 ${M}mm</text>`;
+
+  // 长度标注 (左侧)
+  const dimX = ox - 25;
+  svg += `<line x1="${dimX}" y1="${oy}" x2="${dimX}" y2="${oy + cladH}" stroke="#6b7280" stroke-width="1"/>`;
+  svg += `<line x1="${dimX-4}" y1="${oy}" x2="${dimX+4}" y2="${oy}" stroke="#6b7280" stroke-width="1"/>`;
+  svg += `<line x1="${dimX-4}" y1="${oy+cladH}" x2="${dimX+4}" y2="${oy+cladH}" stroke="#6b7280" stroke-width="1"/>`;
+  svg += `<text x="${dimX - 8}" y="${oy + cladH/2}" text-anchor="middle" font-size="11" fill="#374151" font-weight="600" transform="rotate(-90, ${dimX-8}, ${oy+cladH/2})">覆层长 ${Q}mm</text>`;
+
+  // 图例
+  svg += `<rect x="${w - 150}" y="${h - 50}" width="12" height="12" fill="#10b981" fill-opacity="0.3" stroke="#10b981"/>`;
+  svg += `<text x="${w - 132}" y="${h - 40}" font-size="9" fill="#374151">覆层条带</text>`;
+  svg += `<rect x="${w - 150}" y="${h - 32}" width="12" height="12" fill="#dbeafe" stroke="#3b82f6"/>`;
+  svg += `<text x="${w - 132}" y="${h - 22}" font-size="9" fill="#374151">基层钢板</text>`;
+  svg += `<line x1="${w - 150}" y1="${h - 12}" x2="${w - 138}" y2="${h - 12}" stroke="#dc2626" stroke-width="2" stroke-dasharray="4,2"/>`;
+  svg += `<text x="${w - 132}" y="${h - 8}" font-size="9" fill="#374151">焊缝位置</text>`;
+
+  svg += `</svg>`;
+  return svg;
+}
+
+/**
+ * 倍尺SVG图纸
+ */
+function generateMultiBlankSVG(best, H, I, K, O) {
+  const padding = 60;
+  const labelOffset = 30;
+  const maxW = 600;
+  const maxH = 450;
+  const scale = Math.min((maxW - 2 * padding) / best.plateWidth, (maxH - 2 * padding) / best.plateLength);
+  const w = best.plateWidth * scale + 2 * padding;
+  const h = best.plateLength * scale + 2 * padding + labelOffset;
+  const ox = padding;
+  const oy = padding;
+
+  const plateW = best.plateWidth * scale;
+  const plateH = best.plateLength * scale;
+  const margin = 40 * scale;
+  const cutGap = 10 * scale;
+  const pieceW = H * scale;
+  const pieceH = I * scale;
+
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" style="width:100%;max-width:600px;">`;
+
+  // 基板外框
+  svg += `<rect x="${ox}" y="${oy}" width="${plateW}" height="${plateH}" fill="#dbeafe" stroke="#3b82f6" stroke-width="2" rx="2"/>`;
+  svg += `<text x="${ox + plateW/2}" y="${oy - 6}" text-anchor="middle" font-size="11" fill="#1e40af" font-weight="600">基板 ${best.plateWidth}×${best.plateLength}mm (${best.arrangement})</text>`;
+
+  // 成品块
+  const cols = best.cols;
+  const rows = best.rows;
+  const startX = ox + margin;
+  const startY = oy + margin;
+  let pieceNum = 0;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (pieceNum >= best.perPlate) break;
+      const x = startX + c * (pieceW + cutGap);
+      const y = startY + r * (pieceH + cutGap);
+      svg += `<rect x="${x}" y="${y}" width="${pieceW}" height="${pieceH}" fill="#10b981" fill-opacity="0.2" stroke="#059669" stroke-width="1.5" rx="1"/>`;
+      svg += `<text x="${x + pieceW/2}" y="${y + pieceH/2}" text-anchor="middle" font-size="14" fill="#065f46" font-weight="700">${pieceNum + 1}</text>`;
+      // 尺寸标注
+      if (pieceW > 40) {
+        svg += `<text x="${x + pieceW/2}" y="${y + pieceH/2 + 14}" text-anchor="middle" font-size="8" fill="#374151">${H}×${I}</text>`;
+      }
+      pieceNum++;
+    }
+  }
+
+  // 切割线
+  if (cols > 1) {
+    for (let c = 1; c < cols; c++) {
+      const x = startX + c * pieceW + (c - 1) * cutGap + cutGap / 2;
+      svg += `<line x1="${x}" y1="${oy + margin}" x2="${x}" y2="${oy + plateH - margin}" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="5,3"/>`;
+    }
+  }
+  if (rows > 1) {
+    for (let r = 1; r < rows; r++) {
+      const y = startY + r * pieceH + (r - 1) * cutGap + cutGap / 2;
+      svg += `<line x1="${ox + margin}" y1="${y}" x2="${ox + plateW - margin}" y2="${y}" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="5,3"/>`;
+    }
+  }
+
+  // 余量标注
+  svg += `<text x="${ox + 4}" y="${oy + plateH/2}" font-size="8" fill="#9ca3af" transform="rotate(-90, ${ox+4}, ${oy+plateH/2})">余量40mm</text>`;
+  svg += `<text x="${ox + plateW/2}" y="${oy + plateH - 4}" text-anchor="middle" font-size="8" fill="#9ca3af">余量40mm</text>`;
+
+  // 尺寸标注
+  const dimY = oy + plateH + 18;
+  svg += `<line x1="${ox}" y1="${dimY}" x2="${ox + plateW}" y2="${dimY}" stroke="#6b7280" stroke-width="1"/>`;
+  svg += `<text x="${ox + plateW/2}" y="${dimY + 12}" text-anchor="middle" font-size="10" fill="#374151" font-weight="600">${best.plateWidth}mm</text>`;
+
+  const dimX = ox - 18;
+  svg += `<line x1="${dimX}" y1="${oy}" x2="${dimX}" y2="${oy + plateH}" stroke="#6b7280" stroke-width="1"/>`;
+  svg += `<text x="${dimX - 4}" y="${oy + plateH/2}" text-anchor="middle" font-size="10" fill="#374151" font-weight="600" transform="rotate(-90, ${dimX-4}, ${oy+plateH/2})">${best.plateLength}mm</text>`;
+
+  // 图例
+  svg += `<rect x="${w - 130}" y="${h - 45}" width="12" height="12" fill="#10b981" fill-opacity="0.2" stroke="#059669"/>`;
+  svg += `<text x="${w - 112}" y="${h - 35}" font-size="9" fill="#374151">成品(${H}×${I}mm)</text>`;
+  svg += `<line x1="${w - 130}" y1="${h - 20}" x2="${w - 118}" y2="${h - 20}" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4,2"/>`;
+  svg += `<text x="${w - 112}" y="${h - 16}" font-size="9" fill="#374151">切割线</text>`;
+
+  // 节省信息
+  svg += `<text x="${ox}" y="${h - 6}" font-size="9" fill="#059669" font-weight="600">节省材料 ${best.savingArea}㎡ (${best.savingRate}%) | 需${best.platesNeeded}块基板</text>`;
+
+  svg += `</svg>`;
+  return svg;
+}
+
+/**
+ * 标准方案SVG (无需拼焊/倍尺)
+ */
+function generateStandardSVG(M, Q, K, O, H, I, isCircular) {
+  const padding = 60;
+  const labelOffset = 30;
+  const maxW = 500;
+  const maxH = 350;
+  const scale = Math.min((maxW - 2 * padding) / Math.max(M, K), (maxH - 2 * padding) / Math.max(Q, O));
+  const w = Math.max(M, K) * scale + 2 * padding;
+  const h = Math.max(Q, O) * scale + 2 * padding + labelOffset;
+  const ox = padding;
+  const oy = padding;
+
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" style="width:100%;max-width:500px;">`;
+
+  // 基层
+  const baseW = K * scale;
+  const baseH = O * scale;
+  const baseX = ox + (M * scale - baseW) / 2;
+  const baseY = oy + (Q * scale - baseH) / 2;
+  svg += `<rect x="${baseX}" y="${baseY}" width="${baseW}" height="${baseH}" fill="#dbeafe" stroke="#3b82f6" stroke-width="2" rx="2"/>`;
+  svg += `<text x="${baseX + baseW/2}" y="${baseY - 6}" text-anchor="middle" font-size="11" fill="#1e40af" font-weight="600">基层 ${K}×${O}mm</text>`;
+
+  // 覆层
+  const cladW = M * scale;
+  const cladH = Q * scale;
+  if (isCircular) {
+    const cx = ox + cladW / 2;
+    const cy = oy + cladH / 2;
+    const r = Math.min(cladW, cladH) / 2;
+    svg += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#10b981" fill-opacity="0.3" stroke="#059669" stroke-width="2"/>`;
+    svg += `<text x="${cx}" y="${cy}" text-anchor="middle" font-size="12" fill="#065f46" font-weight="600">成品</text>`;
+    svg += `<text x="${cx}" y="${cy + 16}" text-anchor="middle" font-size="10" fill="#065f46">Ф${H}mm</text>`;
+  } else {
+    svg += `<rect x="${ox}" y="${oy}" width="${cladW}" height="${cladH}" fill="#10b981" fill-opacity="0.3" stroke="#059669" stroke-width="2" rx="1"/>`;
+    svg += `<text x="${ox + cladW/2}" y="${oy + cladH/2}" text-anchor="middle" font-size="12" fill="#065f46" font-weight="600">覆层 ${M}×${Q}mm</text>`;
+  }
+
+  // 尺寸标注
+  const dimY = oy + Math.max(cladH, baseH) + 18;
+  svg += `<line x1="${ox}" y1="${dimY}" x2="${ox + cladW}" y2="${dimY}" stroke="#6b7280" stroke-width="1"/>`;
+  svg += `<text x="${ox + cladW/2}" y="${dimY + 12}" text-anchor="middle" font-size="10" fill="#374151" font-weight="600">${M}mm</text>`;
+
+  svg += `</svg>`;
+  return svg;
+}
+
 // ========== 批量计算 ==========
 
 /**
@@ -707,6 +1249,8 @@ if (typeof window !== 'undefined') {
     calculateBatch,
     summarizeResults,
     designRawMaterial,
+    designLayoutPlan,
+    generateWeldingDrawing,
     getCladdingMaterial,
     getBaseMaterial,
     getCladdingDensity,
@@ -720,6 +1264,7 @@ if (typeof window !== 'undefined') {
     MATERIAL_CATEGORY,
     STANDARD_STAINLESS_WIDTHS,
     MAX_PURCHASE_LENGTH,
+    PROCESSING_FEES,
     DEFAULTS,
   };
 }

@@ -130,9 +130,23 @@
           </label>
         </div>
         <div class="alert alert-info">
-          系统根据成品尺寸、复层厚度和材料类型，按 NB/T 47002.1-2019 标准自动查表确定基层/覆层放量。不锈钢常见可采购宽度: 1219/1500/1800/2000/2500mm，最长8000mm。
+          系统根据成品尺寸、复层厚度和材料类型，按 NB/T 47002.1-2019 标准自动查表确定基层/覆层放量。不锈钢常见可采购宽度: 1219/1500/1800/2000/2500mm，最长8000mm。厚度可自动按标准生成，也可在下方手动输入覆盖。
         </div>
         <div id="rawMaterialDesign"></div>
+      </div>
+    </div>
+
+    <!-- 拼焊/倍尺方案设计 -->
+    <div class="card mb-24" id="layoutPlanCard" style="display:none;">
+      <div class="card-header">
+        <h2>拼焊/倍尺方案设计</h2>
+        <span class="text-sm text-secondary">当采购尺寸超标时自动给出拼焊或倍尺方案及图纸</span>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-info">
+          当覆层采购宽度超过2500mm时需拼焊设计；当采购长度超过8000mm或多张成品可合并时建议倍尺排列。下方自动生成方案和SVG图纸，图纸可右键另存为图片。
+        </div>
+        <div id="layoutPlanDesign"></div>
       </div>
     </div>
 

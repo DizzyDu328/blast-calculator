@@ -168,6 +168,7 @@ const App = {
       samplingCb.addEventListener('change', () => {
         this.designOptions.sampling = samplingCb.checked;
         this.renderRawMaterialDesign();
+        this.renderLayoutPlan();
       });
     }
 
@@ -177,6 +178,7 @@ const App = {
       asmeCb.addEventListener('change', () => {
         this.designOptions.asmeSA264 = asmeCb.checked;
         this.renderRawMaterialDesign();
+        this.renderLayoutPlan();
       });
     }
   },
@@ -214,6 +216,7 @@ const App = {
     if (this.parsedItems.length === 0) {
       container.innerHTML = '';
       this.renderRawMaterialDesign();
+      this.renderLayoutPlan();
       return;
     }
 
@@ -227,17 +230,30 @@ const App = {
         <div class="item-index">${idx + 1}</div>
         <div class="item-content">
           <div class="item-field"><span class="label">牌号:</span><span class="value">${item.grade}</span></div>
-          <div class="item-field"><span class="label">复层厚度:</span><span class="value">${item.claddingThickness}mm</span></div>
-          <div class="item-field"><span class="label">基层厚度:</span><span class="value">${item.baseThickness}mm</span></div>
+          <div class="item-field">
+            <span class="label">复层厚度:</span>
+            <input type="number" class="inline-input" value="${item.claddingThickness}" step="0.1" min="0.5"
+              onchange="App.updateThickness(${idx}, 'claddingThickness', this.value)" style="width:60px;">mm
+          </div>
+          <div class="item-field">
+            <span class="label">基层厚度:</span>
+            <input type="number" class="inline-input" value="${item.baseThickness}" step="0.5" min="1"
+              onchange="App.updateThickness(${idx}, 'baseThickness', this.value)" style="width:60px;">mm
+          </div>
           ${dimText}
-          <div class="item-field"><span class="label">张数:</span><span class="value">${item.sheets}张</span></div>
+          <div class="item-field">
+            <span class="label">张数:</span>
+            <input type="number" class="inline-input" value="${item.sheets}" min="1"
+              onchange="App.updateThickness(${idx}, 'sheets', this.value)" style="width:50px;">张
+          </div>
         </div>
         <button class="btn btn-sm btn-danger" onclick="App.removeItem(${idx})">删除</button>
       </div>
     `;}).join('');
 
-    // 同时渲染原材料尺寸设计
+    // 同时渲染原材料尺寸设计和拼焊方案
     this.renderRawMaterialDesign();
+    this.renderLayoutPlan();
   },
 
   // ========== 原材料尺寸设计 ==========
@@ -367,6 +383,129 @@ const App = {
   removeItem(idx) {
     this.parsedItems.splice(idx, 1);
     this.renderParsedItems();
+  },
+
+  updateThickness(idx, field, value) {
+    const v = parseFloat(value);
+    if (isNaN(v) || v <= 0) return;
+    this.parsedItems[idx][field] = field === 'sheets' ? Math.round(v) : v;
+    this.renderRawMaterialDesign();
+    this.renderLayoutPlan();
+  },
+
+  // ========== 拼焊/倍尺方案设计 ==========
+
+  renderLayoutPlan() {
+    const card = document.getElementById('layoutPlanCard');
+    const container = document.getElementById('layoutPlanDesign');
+
+    if (this.parsedItems.length === 0) {
+      card.style.display = 'none';
+      container.innerHTML = '';
+      return;
+    }
+
+    card.style.display = '';
+
+    container.innerHTML = this.parsedItems.map((item, idx) => {
+      const planResult = CostCalculator.designLayoutPlan({
+        ...item,
+        options: this.designOptions,
+      });
+
+      const plansHtml = planResult.plans.map((plan, pIdx) => {
+        const drawing = CostCalculator.generateWeldingDrawing(plan, planResult.rawMaterial, planResult.input);
+        let detailHtml = '';
+
+        if (plan.type === 'welding') {
+          detailHtml = `
+            <div class="lp-detail">
+              <table class="rm-table">
+                <tr><td>条带数</td><td>${plan.stripCount} 条</td></tr>
+                <tr><td>各条带宽度</td><td>${plan.strips.map(s => s.actualWidth + 'mm').join(' + ')}</td></tr>
+                <tr><td>标准板宽</td><td>${plan.strips[0].standardWidth}mm</td></tr>
+                <tr><td>焊缝数量</td><td>${plan.stripCount - 1} 条</td></tr>
+                <tr><td>焊缝位置</td><td>${plan.weldPositions.map(p => p + 'mm').join(', ')}</td></tr>
+                <tr><td>焊缝总长</td><td><strong>${plan.weldLength_m} m</strong></td></tr>
+                <tr><td>拼焊费用</td><td><strong>${plan.weldCost} 元</strong> (按${plan.weldPricePerM}元/m)</td></tr>
+                <tr><td>废料宽度</td><td>${plan.wasteWidth}mm (${plan.wasteArea.toFixed(2)}㎡)</td></tr>
+              </table>
+            </div>`;
+        } else if (plan.type === 'multiblank' && plan.best) {
+          const optsHtml = plan.allOptions ? plan.allOptions.map((opt, i) => 
+            `<tr><td>${opt.arrangement}</td><td>${opt.perPlate}张/板</td><td>${opt.platesNeeded}板</td><td>${opt.plateWidth}×${opt.plateLength}mm</td><td>${opt.savingArea}㎡</td><td>${opt.savingRate}%</td>${i === 0 ? '<td><span class="badge badge-green">推荐</span></td>' : '<td></td>'}</tr>`
+          ).join('') : '';
+          detailHtml = `
+            <div class="lp-detail">
+              <table class="rm-table">
+                <tr><td>推荐排列</td><td><strong>${plan.best.arrangement}</strong> (${plan.best.cols}列×${plan.best.rows}行)</td></tr>
+                <tr><td>每板排列</td><td>${plan.best.perPlate} 张/板</td></tr>
+                <tr><td>需基板数</td><td>${plan.best.platesNeeded} 块</td></tr>
+                <tr><td>基板尺寸</td><td>${plan.best.plateWidth} × ${plan.best.plateLength} mm</td></tr>
+                <tr><td>节省面积</td><td><strong style="color:var(--success)">${plan.best.savingArea} ㎡</strong></td></tr>
+                <tr><td>节省率</td><td><strong style="color:var(--success)">${plan.best.savingRate}%</strong></td></tr>
+                <tr><td>切割次数</td><td>${plan.best.cutCount} 次</td></tr>
+              </table>
+              ${plan.allOptions && plan.allOptions.length > 1 ? `
+                <div class="text-sm text-secondary" style="margin-top:8px;">其他方案对比:</div>
+                <table class="data-table" style="margin-top:4px;font-size:11px;">
+                  <thead><tr><th>排列</th><th>每板</th><th>板数</th><th>基板尺寸</th><th>节省</th><th>节省率</th><th></th></tr></thead>
+                  <tbody>${optsHtml}</tbody>
+                </table>
+              ` : ''}
+            </div>`;
+        } else {
+          detailHtml = `<div class="alert alert-success" style="margin:0;">采购尺寸符合标准，无需拼焊或倍尺。</div>`;
+        }
+
+        const badgeClass = plan.type === 'welding' ? 'badge-red' : plan.type === 'multiblank' ? 'badge-amber' : 'badge-green';
+        const badgeText = plan.type === 'welding' ? '拼焊' : plan.type === 'multiblank' ? '倍尺' : '标准';
+
+        return `
+          <div class="lp-plan">
+            <div class="lp-plan-header">
+              <span class="badge ${badgeClass}">${badgeText}</span>
+              <span class="lp-plan-title">${plan.title}</span>
+              <span class="text-sm text-secondary">${plan.reason}</span>
+            </div>
+            ${detailHtml}
+            ${drawing ? `<div class="lp-drawing" id="drawing_${idx}_${pIdx}">${drawing}<div style="margin-top:8px;"><button class="btn btn-sm" onclick="App.downloadDrawing(${idx}, ${pIdx})">下载图纸 (SVG)</button></div></div>` : ''}
+          </div>
+        `;
+      }).join('');
+
+      const shapeIcon = planResult.input.isCircular ? ' <span class="badge badge-blue">圆</span>' : '';
+
+      return `
+        <div class="lp-item">
+          <div class="lp-header">
+            <span class="rm-index">${idx + 1}</span>
+            <span class="rm-grade"><strong>${planResult.input.grade}</strong>${shapeIcon}</span>
+            <span class="text-sm text-secondary">覆层采购: ${planResult.rawMaterial.claddingPurchaseWidth}×${planResult.rawMaterial.claddingPurchaseLength}mm</span>
+          </div>
+          ${plansHtml}
+        </div>
+      `;
+    }).join('');
+  },
+
+  downloadDrawing(itemIdx, planIdx) {
+    const container = document.getElementById('drawing_' + itemIdx + '_' + planIdx);
+    if (!container) return;
+    const svg = container.querySelector('svg');
+    if (!svg) return;
+
+    const serializer = new XMLSerializer();
+    const svgStr = serializer.serializeToString(svg);
+    const blob = new Blob([svgStr], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `拼焊图纸_${itemIdx + 1}_${planIdx + 1}.svg`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   },
 
   loadSampleData() {
