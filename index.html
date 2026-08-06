@@ -118,11 +118,19 @@
     <div class="card mb-24" id="rawMaterialCard" style="display:none;">
       <div class="card-header">
         <h2>原材料尺寸设计</h2>
-        <span class="text-sm text-secondary">根据成品尺寸自动推导采购原材料尺寸</span>
+        <span class="text-sm text-secondary">根据 NB/T 47002.1-2019 标准自动推导采购原材料尺寸</span>
       </div>
       <div class="card-body">
+        <div class="rm-options">
+          <label class="checkbox-label">
+            <input type="checkbox" id="samplingCheckbox"> 取样 (+150mm)
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="asmeCheckbox"> 执行美标 ASME SA264 (基层+1mm)
+          </label>
+        </div>
         <div class="alert alert-info">
-          系统根据成品尺寸和材料类型，自动计算基层/复层的采购尺寸（加宽余量、加长余量），用于原材料采购下单。
+          系统根据成品尺寸、复层厚度和材料类型，按 NB/T 47002.1-2019 标准自动查表确定基层/覆层放量。不锈钢常见可采购宽度: 1219/1500/1800/2000/2500mm，最长8000mm。
         </div>
         <div id="rawMaterialDesign"></div>
       </div>

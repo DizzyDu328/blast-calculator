@@ -98,26 +98,153 @@ const DEFAULTS = {
   scrapSteelPrice: 2300,   // 废钢价格 元/吨
 };
 
-// 根据材料类型获取默认余量
+// 根据材料类型获取默认余量 (兼容旧接口, 内部调用 getMarginsByStandard)
 function getDefaultMargins(grade) {
-  const mat = getCladdingMaterial(grade);
-  const category = MATERIAL_CATEGORY[mat] || 'austenitic';
+  const m = getMarginsByStandard(grade, 3, 10, 1600, 6000, {});
+  return {
+    baseWidening: m.baseWidening,
+    baseLengthening: m.baseLengthening,
+    claddingExtraMargin: m.claddingWidening, // 旧字段, 现在等于独立覆层余量
+  };
+}
 
+// ========== NB/T 47002.1-2019 放量标准 ==========
+
+// 不锈钢常见可采购宽度 (mm)
+const STANDARD_STAINLESS_WIDTHS = [1219, 1500, 1800, 2000, 2500];
+const MAX_PURCHASE_LENGTH = 8000; // 最长采购长度
+
+/**
+ * 根据 NB/T 47002.1-2019 标准查表获取放量
+ * @param {string} grade - 牌号, 如 "S31603+Q235B"
+ * @param {number} claddingThickness - 复层厚度 mm
+ * @param {number} baseThickness - 基层厚度 mm
+ * @param {number} width - 成品宽度 mm
+ * @param {number} length - 成品长度 mm
+ * @param {Object} options - { sampling: bool, asmeSA264: bool }
+ * @returns {Object} 余量参数
+ */
+function getMarginsByStandard(grade, claddingThickness, baseThickness, width, length, options = {}) {
+  const claddingMat = getCladdingMaterial(grade);
+  const category = MATERIAL_CATEGORY[claddingMat] || 'austenitic';
+
+  // 钛材使用独立余量标准 (NB/T 47002.3)
   if (category === 'titanium') {
-    // 钛材: 余量更大
+    let baseW = 60, baseL = 100, cladW = 40, cladL = 40;
+    let notes = ['钛材标准余量'];
+    if (options.sampling) {
+      baseL += 150; cladL += 150;
+      notes.push('取样+150mm');
+    }
     return {
-      baseWidening: 60,        // 基层加宽 mm (J)
-      baseLengthening: 100,    // 基层加长 mm (N)
-      claddingExtraMargin: 40, // 复层额外余量 mm (L=J+40, P=N+40)
-    };
-  } else {
-    // 不锈钢/镍基/铜合金: 标准余量
-    return {
-      baseWidening: 40,        // 基层加宽 mm (J)
-      baseLengthening: 50,     // 基层加长 mm (N)
-      claddingExtraMargin: 30, // 复层额外余量 mm (L=J+30, P=N+30)
+      baseWidening: baseW,
+      baseLengthening: baseL,
+      claddingWidening: cladW,
+      claddingLengthening: cladL,
+      asmeExtra: 0,
+      marginSource: '钛材标准余量',
+      conditionDesc: notes.join(' '),
+      thicknessTolerance: '钛材标准',
+      group: 0,
     };
   }
+
+  // 不锈钢/双相钢: 按 NB/T 47002.1-2019 查表
+  // 确定复层厚度分组
+  let group;
+  if (claddingThickness <= 2) group = 1;
+  else if (claddingThickness <= 7) group = 2;
+  else group = 3;
+
+  const groupDesc = group === 1 ? '复层≤2mm' : group === 2 ? '复层3~7mm' : '复层8~10mm';
+  const thickTol = group === 1 ? '≥-0.1mm' : group === 2 ? '≥-0.15mm' : '≥-0.3mm';
+
+  let baseWidening, baseLengthening;
+  let conditionDesc = '';
+
+  // 查表: 基层余量取决于成品宽度、成品长度
+  if (group === 1 || group === 2) {
+    if (width >= 2600) {
+      baseWidening = 50;
+      baseLengthening = Math.round(length * 0.01);
+      conditionDesc = `宽≥2600: 基层+50/+1%`;
+    } else if (length > 5000) {
+      baseWidening = 40;
+      baseLengthening = Math.round(length * 0.01);
+      conditionDesc = `宽≤2600, 长>5000: 基层+40/+1%`;
+    } else {
+      baseWidening = 40;
+      baseLengthening = 40;
+      conditionDesc = `宽≤2600, 长≤5000: 基层+40/+40`;
+    }
+  } else {
+    // group 3 (8~10mm)
+    if (width >= 2600 || length > 5000) {
+      baseWidening = 50;
+      baseLengthening = Math.round(length * 0.01);
+      conditionDesc = `宽≥2600或长>5000: 基层+50/+1%`;
+    } else {
+      baseWidening = 50;
+      baseLengthening = 50;
+      conditionDesc = `宽≤2600, 长≤5000: 基层+50/+50`;
+    }
+  }
+
+  // 覆层余量: 固定 +30/+30
+  let claddingWidening = 30;
+  let claddingLengthening = 30;
+  let notes = [`覆层+30/+30`, conditionDesc];
+
+  // 取样: 额外+150mm
+  if (options.sampling) {
+    baseLengthening += 150;
+    claddingLengthening += 150;
+    notes.push('取样+150mm');
+  }
+
+  // ASME SA264: 基层加厚1mm且要求正公差
+  const asmeExtra = options.asmeSA264 ? 1 : 0;
+  if (asmeExtra) {
+    notes.push('ASME SA264: 基层+1mm');
+  }
+
+  return {
+    baseWidening,
+    baseLengthening,
+    claddingWidening,
+    claddingLengthening,
+    asmeExtra,
+    marginSource: `NB/T 47002.1-2019 ${groupDesc}`,
+    conditionDesc: notes.join('，'),
+    thicknessTolerance: thickTol,
+    group,
+  };
+}
+
+/**
+ * 检查采购尺寸是否符合可采购标准
+ * @returns {Array} 警告信息数组
+ */
+function checkPurchaseSize(purchaseWidth, purchaseLength, isStainlessCladding) {
+  const warnings = [];
+
+  if (isStainlessCladding) {
+    const matched = STANDARD_STAINLESS_WIDTHS.includes(purchaseWidth);
+    if (!matched) {
+      const nextUp = STANDARD_STAINLESS_WIDTHS.find(w => w >= purchaseWidth);
+      if (nextUp) {
+        warnings.push(`复层采购宽度 ${purchaseWidth}mm 非标准宽度，建议选用 ${nextUp}mm 标准板（余料≥${nextUp - purchaseWidth}mm）`);
+      } else {
+        warnings.push(`复层采购宽度 ${purchaseWidth}mm 超出最大标准宽度 2500mm，需拼焊设计`);
+      }
+    }
+  }
+
+  if (purchaseLength > MAX_PURCHASE_LENGTH) {
+    warnings.push(`采购长度 ${purchaseLength}mm 超过最大长度 ${MAX_PURCHASE_LENGTH}mm，需倍尺或拼焊设计`);
+  }
+
+  return warnings;
 }
 
 // ========== 工具函数 ==========
@@ -188,7 +315,11 @@ function getExplosionPrice(claddingThickness, grade) {
  * @returns {Object} 原材料尺寸设计结果
  */
 function designRawMaterial(input) {
-  const defaultMargins = getDefaultMargins(input.grade || '');
+  // 使用 NB/T 47002.1-2019 标准查表获取余量
+  const stdMargins = getMarginsByStandard(
+    input.grade || '', input.claddingThickness || 0, input.baseThickness || 0,
+    input.width || 0, input.length || 0, input.options || {}
+  );
 
   const {
     grade = '',
@@ -197,13 +328,19 @@ function designRawMaterial(input) {
     width: H = 0,
     length: I = 0,
     sheets: S = 1,
-    purchaseCladdingThickness: E = D,
-    purchaseBaseThickness: G = F,
-    baseWidening: J = defaultMargins.baseWidening,
-    baseLengthening: N = defaultMargins.baseLengthening,
-    claddingExtraMargin = defaultMargins.claddingExtraMargin,
     isCircular = false,
   } = input;
+
+  // 余量参数 (支持用户覆盖)
+  const baseWidening = input.baseWidening ?? stdMargins.baseWidening;
+  const baseLengthening = input.baseLengthening ?? stdMargins.baseLengthening;
+  const claddingWidening = input.claddingWidening ?? stdMargins.claddingWidening;
+  const claddingLengthening = input.claddingLengthening ?? stdMargins.claddingLengthening;
+  const asmeExtra = stdMargins.asmeExtra;
+
+  // 采购厚度 (ASME SA264 时基层+1mm)
+  const E = D;                          // 采购复层厚度 = 成品复层厚度
+  const G = F + asmeExtra;              // 采购基层厚度 (ASME时+1mm)
 
   // 密度
   const R = getCladdingDensity(grade);
@@ -216,16 +353,13 @@ function designRawMaterial(input) {
 
   // ========== 余量与采购尺寸 ==========
   const C = D + F;                    // 成品总厚度 mm
-  const L = J + claddingExtraMargin;  // 复层加宽 mm
-  const M = H + L;                    // 复层采购宽度 mm
-  const P = N + claddingExtraMargin;  // 复层加长 mm
-  const Q = I + P;                    // 复层采购长度 mm
-  const K = H + J;                    // 基层采购宽度 mm
-  const O = I + N;                    // 基层采购长度 mm
+  const K = H + baseWidening;         // 基层采购宽度 mm
+  const O = I + baseLengthening;      // 基层采购长度 mm
+  const M = H + claddingWidening;     // 复层采购宽度 mm
+  const Q = I + claddingLengthening;  // 复层采购长度 mm
 
   // ========== 面积 ==========
   const explosionArea_mm2 = K * O;                    // 爆炸面积(采购矩形) mm²
-  const finishedAreaRect_mm2 = H * I;                // 成品矩形面积 mm²
   const explosionAreaPerSheet = explosionArea_mm2 / 1000000; // ㎡
   const finishedAreaPerSheet = finishedArea_mm2 / 1000000;   // ㎡ (圆形用πr²)
   const totalFinishedArea = finishedAreaPerSheet * S;
@@ -245,6 +379,10 @@ function designRawMaterial(input) {
   const claddingYield = purchaseCladdingWeight > 0 ? finishedCladdingWeight / purchaseCladdingWeight : 0;
   const totalYield = purchaseTotalWeight > 0 ? finishedUnitWeight / purchaseTotalWeight : 0;
 
+  // ========== 尺寸合规检查 ==========
+  const isStainless = category !== 'titanium';
+  const warnings = checkPurchaseSize(M, Q, isStainless);
+
   return {
     input: {
       grade,
@@ -262,27 +400,28 @@ function designRawMaterial(input) {
       purchaseBaseThickness: G,
     },
     margins: {
-      baseWidening: J,
-      baseLengthening: N,
-      claddingExtraMargin: claddingExtraMargin,
-      claddingWidening: L,
-      claddingLengthening: P,
-      marginSource: category === 'titanium' ? '钛材标准余量' : '不锈钢标准余量',
+      baseWidening,
+      baseLengthening,
+      claddingWidening,
+      claddingLengthening,
+      asmeExtra,
+      marginSource: stdMargins.marginSource,
+      conditionDesc: stdMargins.conditionDesc,
+      thicknessTolerance: stdMargins.thicknessTolerance,
+      group: stdMargins.group,
     },
     rawMaterial: {
-      // 基层(碳钢)采购尺寸
       basePurchaseWidth: K,
       basePurchaseLength: O,
       basePurchaseThickness: G,
-      // 复层(不锈钢/钛)采购尺寸
       claddingPurchaseWidth: M,
       claddingPurchaseLength: Q,
       claddingPurchaseThickness: E,
     },
     area: {
-      explosionAreaPerSheet,   // 单板爆炸面积(矩形采购面) ㎡
-      finishedAreaPerSheet,    // 单板成品面积 ㎡ (圆形用πr²)
-      totalFinishedArea,       // 成品总面积 ㎡
+      explosionAreaPerSheet,
+      finishedAreaPerSheet,
+      totalFinishedArea,
     },
     weight: {
       purchaseBaseWeight,
@@ -303,6 +442,7 @@ function designRawMaterial(input) {
       baseDensity: baseDensity,
       category: category,
     },
+    warnings,
   };
 }
 
@@ -328,8 +468,11 @@ function designRawMaterial(input) {
  * @returns {Object} 计算结果
  */
 function calculateCost(input) {
-  // 根据材料类型获取默认余量
-  const defaultMargins = getDefaultMargins(input.grade || '');
+  // 使用 NB/T 47002.1-2019 标准查表获取余量
+  const stdMargins = getMarginsByStandard(
+    input.grade || '', input.claddingThickness || 0, input.baseThickness || 0,
+    input.width || 0, input.length || 0, input.options || {}
+  );
 
   const {
     grade = '',
@@ -338,11 +481,6 @@ function calculateCost(input) {
     width: H = 0,
     length: I = 0,
     sheets: S = 1,
-    purchaseCladdingThickness: E = D,
-    purchaseBaseThickness: G = F,
-    baseWidening: J = defaultMargins.baseWidening,
-    baseLengthening: N = defaultMargins.baseLengthening,
-    claddingExtraMargin = defaultMargins.claddingExtraMargin,
     carbonSteelPrice: AE = 0,
     stainlessSteelPrice: AF = 0,
     quotationPerTon: AP = 0,
@@ -350,27 +488,34 @@ function calculateCost(input) {
     isCircular = false,
   } = input;
 
+  // 余量参数 (支持用户覆盖)
+  const baseWidening = input.baseWidening ?? stdMargins.baseWidening;
+  const baseLengthening = input.baseLengthening ?? stdMargins.baseLengthening;
+  const claddingWidening = input.claddingWidening ?? stdMargins.claddingWidening;
+  const claddingLengthening = input.claddingLengthening ?? stdMargins.claddingLengthening;
+  const asmeExtra = stdMargins.asmeExtra;
+
+  // 采购厚度
+  const E = D;                          // 采购复层厚度
+  const G = F + asmeExtra;              // 采购基层厚度 (ASME时+1mm)
+
   // 密度
-  const R = getCladdingDensity(grade); // 复层密度
-  const baseDensity = getBaseDensity(grade); // 基层密度 (7.85)
+  const R = getCladdingDensity(grade);
+  const baseDensity = getBaseDensity(grade);
 
   // 爆炸单价 (查表)
   const explosionPrice = AD || getExplosionPrice(D, grade);
 
   // 圆形板面积计算 (mm²)
   const circleArea = (d) => Math.PI * (d / 2) * (d / 2);
-
-  // 成品面积: 圆形板用 π*r², 矩形板用 宽*长
   const finishedArea_mm2 = isCircular ? circleArea(H) : H * I;
 
   // ========== 尺寸计算 ==========
   const C = D + F;                    // 总厚度 mm
-  const K = H + J;                    // 基层采购宽度 mm
-  const L = J + claddingExtraMargin;  // 复层加宽 mm
-  const M = H + L;                    // 复层采购宽度 mm
-  const O = I + N;                    // 基层采购长度 mm
-  const P = N + claddingExtraMargin;  // 复层加长 mm
-  const Q = I + P;                    // 复层采购长度 mm
+  const K = H + baseWidening;         // 基层采购宽度 mm
+  const M = H + claddingWidening;     // 复层采购宽度 mm
+  const O = I + baseLengthening;      // 基层采购长度 mm
+  const Q = I + claddingLengthening;  // 复层采购长度 mm
 
   // ========== 面积计算 ==========
   const T = K * O / 1000000;          // 单板爆炸面积 ㎡ (采购尺寸, 始终矩形)
@@ -449,11 +594,14 @@ function calculateCost(input) {
 
     // 尺寸参数
     dimensions: {
-      baseWidening: J,
-      claddingWidening: L,
-      claddingExtraMargin: claddingExtraMargin,
-      baseLengthening: N,
-      claddingLengthening: P,
+      baseWidening,
+      claddingWidening,
+      baseLengthening,
+      claddingLengthening,
+      asmeExtra,
+      marginSource: stdMargins.marginSource,
+      conditionDesc: stdMargins.conditionDesc,
+      thicknessTolerance: stdMargins.thicknessTolerance,
       basePurchaseWidth: K,
       claddingPurchaseWidth: M,
       basePurchaseLength: O,
@@ -564,10 +712,14 @@ if (typeof window !== 'undefined') {
     getCladdingDensity,
     getExplosionPrice,
     getDefaultMargins,
+    getMarginsByStandard,
+    checkPurchaseSize,
     CLADDING_DENSITY,
     BASE_DENSITY,
     EXPLOSION_PRICE_TABLE,
     MATERIAL_CATEGORY,
+    STANDARD_STAINLESS_WIDTHS,
+    MAX_PURCHASE_LENGTH,
     DEFAULTS,
   };
 }

@@ -528,6 +528,52 @@ body {
   color: var(--danger);
 }
 
+.badge-amber {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+/* ========== 原材料设计选项 ========== */
+.rm-options {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  background: var(--bg);
+  border-radius: 8px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+/* ========== 尺寸警告 ========== */
+.rm-warnings {
+  margin: 6px 0;
+  padding: 8px 12px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+}
+
+.rm-warning {
+  font-size: 12px;
+  color: #9a3412;
+  line-height: 1.6;
+}
+
 /* ========== 间距工具类 ========== */
 .mt-16 { margin-top: 16px; }
 .mt-24 { margin-top: 24px; }

@@ -48,6 +48,10 @@ const App = {
     quotationPerTon: 14580,
     explosionPrice: null,  // null = 自动查表
   },
+  designOptions: {      // 原材料设计选项
+    sampling: false,    // 取样
+    asmeSA264: false,   // ASME SA264标准
+  },
 
   init() {
     this.bindEvents();
@@ -157,6 +161,24 @@ const App = {
         this.priceConfig.explosionPrice = val ? parseFloat(val) : null;
       });
     }
+
+    // 取样勾选
+    const samplingCb = document.getElementById('samplingCheckbox');
+    if (samplingCb) {
+      samplingCb.addEventListener('change', () => {
+        this.designOptions.sampling = samplingCb.checked;
+        this.renderRawMaterialDesign();
+      });
+    }
+
+    // ASME SA264 勾选
+    const asmeCb = document.getElementById('asmeCheckbox');
+    if (asmeCb) {
+      asmeCb.addEventListener('change', () => {
+        this.designOptions.asmeSA264 = asmeCb.checked;
+        this.renderRawMaterialDesign();
+      });
+    }
   },
 
   // ========== 文件处理 ==========
@@ -233,20 +255,30 @@ const App = {
     card.style.display = '';
 
     container.innerHTML = this.parsedItems.map((item, idx) => {
-      const design = CostCalculator.designRawMaterial(item);
+      const design = CostCalculator.designRawMaterial({
+        ...item,
+        options: this.designOptions,
+      });
       const shapeIcon = design.input.isCircular ? ' <span class="badge badge-blue">圆</span>' : '';
       const finishedDim = design.input.isCircular
         ? `Ф${design.input.diameter || design.input.width}mm`
         : `${design.input.width} × ${design.input.length}mm`;
 
+      const warningHtml = (design.warnings && design.warnings.length > 0)
+        ? `<div class="rm-warnings">${design.warnings.map(w => `<div class="rm-warning">⚠ ${w}</div>`).join('')}</div>`
+        : '';
+      const asmeBadge = design.margins.asmeExtra > 0
+        ? ' <span class="badge badge-amber">ASME</span>' : '';
+
       return `
         <div class="rm-item">
           <div class="rm-header">
             <span class="rm-index">${idx + 1}</span>
-            <span class="rm-grade"><strong>${design.input.grade}</strong>${shapeIcon}</span>
+            <span class="rm-grade"><strong>${design.input.grade}</strong>${shapeIcon}${asmeBadge}</span>
             <span class="rm-shape">${design.input.isCircular ? '圆形板' : '矩形板'}</span>
-            <span class="text-sm text-secondary">余量来源: ${design.margins.marginSource}</span>
+            <span class="text-sm text-secondary">${design.margins.marginSource}</span>
           </div>
+          <div class="text-sm" style="margin-bottom:6px;color:var(--text-secondary);">放量条件: ${design.margins.conditionDesc} | 厚度公差: ${design.margins.thicknessTolerance}</div>
 
           <div class="rm-flow">
             <!-- 成品尺寸 -->
@@ -265,13 +297,13 @@ const App = {
 
             <!-- 余量参数 -->
             <div class="rm-block rm-margin">
-              <div class="rm-block-title">余量参数</div>
+              <div class="rm-block-title">放量 (NB/T标准)</div>
               <table class="rm-table">
                 <tr><td>基层加宽</td><td>+${design.margins.baseWidening} mm</td></tr>
                 <tr><td>基层加长</td><td>+${design.margins.baseLengthening} mm</td></tr>
-                <tr><td>复层额外余量</td><td>+${design.margins.claddingExtraMargin} mm</td></tr>
-                <tr><td>复层加宽(合计)</td><td>+${design.margins.claddingWidening} mm</td></tr>
-                <tr><td>复层加长(合计)</td><td>+${design.margins.claddingLengthening} mm</td></tr>
+                <tr><td>覆层加宽</td><td>+${design.margins.claddingWidening} mm</td></tr>
+                <tr><td>覆层加长</td><td>+${design.margins.claddingLengthening} mm</td></tr>
+                ${design.margins.asmeExtra > 0 ? `<tr><td>ASME加厚</td><td>+${design.margins.asmeExtra} mm</td></tr>` : ''}
               </table>
             </div>
 
@@ -288,6 +320,8 @@ const App = {
               </table>
             </div>
           </div>
+
+          ${warningHtml}
 
           <!-- 面积与重量 -->
           <div class="rm-flow" style="margin-top: 4px;">
@@ -403,6 +437,7 @@ const App = {
     this.results = this.parsedItems.map(item => {
       return CostCalculator.calculateCost({
         ...item,
+        options: this.designOptions,
         carbonSteelPrice: this.priceConfig.carbonSteelPrice,
         stainlessSteelPrice: this.priceConfig.stainlessSteelPrice,
         quotationPerTon: this.priceConfig.quotationPerTon,
@@ -507,10 +542,14 @@ const App = {
       <div class="detail-section">
         <div class="detail-title">尺寸参数</div>
         <table class="data-table">
-          <tr><td>基层加宽 / 复层加宽</td><td>${r.dimensions.baseWidening} / ${r.dimensions.claddingWidening} mm</td></tr>
-          <tr><td>基层加长 / 复层加长</td><td>${r.dimensions.baseLengthening} / ${r.dimensions.claddingLengthening} mm</td></tr>
+          <tr><td>放量标准</td><td>${r.dimensions.marginSource || '-'}</td></tr>
+          <tr><td>放量条件</td><td>${r.dimensions.conditionDesc || '-'}</td></tr>
+          <tr><td>厚度公差</td><td>${r.dimensions.thicknessTolerance || '-'}</td></tr>
+          <tr><td>基层加宽 / 覆层加宽</td><td>${r.dimensions.baseWidening} / ${r.dimensions.claddingWidening} mm</td></tr>
+          <tr><td>基层加长 / 覆层加长</td><td>${r.dimensions.baseLengthening} / ${r.dimensions.claddingLengthening} mm</td></tr>
+          ${r.dimensions.asmeExtra > 0 ? `<tr><td>ASME加厚</td><td>+${r.dimensions.asmeExtra} mm</td></tr>` : ''}
           <tr><td>基层采购宽度 x 长度</td><td>${r.dimensions.basePurchaseWidth} x ${r.dimensions.basePurchaseLength} mm</td></tr>
-          <tr><td>复层采购宽度 x 长度</td><td>${r.dimensions.claddingPurchaseWidth} x ${r.dimensions.claddingPurchaseLength} mm</td></tr>
+          <tr><td>覆层采购宽度 x 长度</td><td>${r.dimensions.claddingPurchaseWidth} x ${r.dimensions.claddingPurchaseLength} mm</td></tr>
         </table>
       </div>
 
