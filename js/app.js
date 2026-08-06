@@ -191,6 +191,7 @@ const App = {
     const container = document.getElementById('parsedItems');
     if (this.parsedItems.length === 0) {
       container.innerHTML = '';
+      this.renderRawMaterialDesign();
       return;
     }
 
@@ -212,6 +213,121 @@ const App = {
         <button class="btn btn-sm btn-danger" onclick="App.removeItem(${idx})">删除</button>
       </div>
     `;}).join('');
+
+    // 同时渲染原材料尺寸设计
+    this.renderRawMaterialDesign();
+  },
+
+  // ========== 原材料尺寸设计 ==========
+
+  renderRawMaterialDesign() {
+    const card = document.getElementById('rawMaterialCard');
+    const container = document.getElementById('rawMaterialDesign');
+
+    if (this.parsedItems.length === 0) {
+      card.style.display = 'none';
+      container.innerHTML = '';
+      return;
+    }
+
+    card.style.display = '';
+
+    container.innerHTML = this.parsedItems.map((item, idx) => {
+      const design = CostCalculator.designRawMaterial(item);
+      const shapeIcon = design.input.isCircular ? ' <span class="badge badge-blue">圆</span>' : '';
+      const finishedDim = design.input.isCircular
+        ? `Ф${design.input.diameter || design.input.width}mm`
+        : `${design.input.width} × ${design.input.length}mm`;
+
+      return `
+        <div class="rm-item">
+          <div class="rm-header">
+            <span class="rm-index">${idx + 1}</span>
+            <span class="rm-grade"><strong>${design.input.grade}</strong>${shapeIcon}</span>
+            <span class="rm-shape">${design.input.isCircular ? '圆形板' : '矩形板'}</span>
+            <span class="text-sm text-secondary">余量来源: ${design.margins.marginSource}</span>
+          </div>
+
+          <div class="rm-flow">
+            <!-- 成品尺寸 -->
+            <div class="rm-block rm-finished">
+              <div class="rm-block-title">成品尺寸</div>
+              <table class="rm-table">
+                <tr><td>复层厚度</td><td>${design.input.claddingThickness} mm</td></tr>
+                <tr><td>基层厚度</td><td>${design.input.baseThickness} mm</td></tr>
+                <tr><td>总厚度</td><td>${design.input.totalThickness} mm</td></tr>
+                <tr><td>${design.input.isCircular ? '直径' : '宽×长'}</td><td>${finishedDim}</td></tr>
+                <tr><td>张数</td><td>${design.input.sheets} 张</td></tr>
+              </table>
+            </div>
+
+            <div class="rm-arrow">→</div>
+
+            <!-- 余量参数 -->
+            <div class="rm-block rm-margin">
+              <div class="rm-block-title">余量参数</div>
+              <table class="rm-table">
+                <tr><td>基层加宽</td><td>+${design.margins.baseWidening} mm</td></tr>
+                <tr><td>基层加长</td><td>+${design.margins.baseLengthening} mm</td></tr>
+                <tr><td>复层额外余量</td><td>+${design.margins.claddingExtraMargin} mm</td></tr>
+                <tr><td>复层加宽(合计)</td><td>+${design.margins.claddingWidening} mm</td></tr>
+                <tr><td>复层加长(合计)</td><td>+${design.margins.claddingLengthening} mm</td></tr>
+              </table>
+            </div>
+
+            <div class="rm-arrow">→</div>
+
+            <!-- 原材料采购尺寸 -->
+            <div class="rm-block rm-raw">
+              <div class="rm-block-title">原材料(采购)尺寸</div>
+              <table class="rm-table">
+                <tr><td>基层宽×长</td><td><strong>${design.rawMaterial.basePurchaseWidth} × ${design.rawMaterial.basePurchaseLength} mm</strong></td></tr>
+                <tr><td>基层厚度</td><td>${design.rawMaterial.basePurchaseThickness} mm</td></tr>
+                <tr><td>复层宽×长</td><td><strong>${design.rawMaterial.claddingPurchaseWidth} × ${design.rawMaterial.claddingPurchaseLength} mm</strong></td></tr>
+                <tr><td>复层厚度</td><td>${design.rawMaterial.claddingPurchaseThickness} mm</td></tr>
+              </table>
+            </div>
+          </div>
+
+          <!-- 面积与重量 -->
+          <div class="rm-flow" style="margin-top: 4px;">
+            <div class="rm-block rm-summary">
+              <div class="rm-block-title">面积</div>
+              <table class="rm-table">
+                <tr><td>单板爆炸面积</td><td>${design.area.explosionAreaPerSheet.toFixed(2)} ㎡ ${design.input.isCircular ? '(矩形)' : ''}</td></tr>
+                <tr><td>单板成品面积</td><td>${design.area.finishedAreaPerSheet.toFixed(2)} ㎡ ${design.input.isCircular ? '(πr²)' : ''}</td></tr>
+                <tr><td>成品总面积</td><td><strong>${design.area.totalFinishedArea.toFixed(2)} ㎡</strong></td></tr>
+              </table>
+            </div>
+            <div class="rm-block rm-summary">
+              <div class="rm-block-title">重量(单板)</div>
+              <table class="rm-table">
+                <tr><td>采购基层单重</td><td>${design.weight.purchaseBaseWeight.toFixed(3)} 吨</td></tr>
+                <tr><td>采购复层单重</td><td>${design.weight.purchaseCladdingWeight.toFixed(3)} 吨</td></tr>
+                <tr><td>采购单重</td><td><strong>${design.weight.purchaseTotalWeight.toFixed(3)} 吨</strong></td></tr>
+              </table>
+            </div>
+            <div class="rm-block rm-summary">
+              <div class="rm-block-title">重量(成品)</div>
+              <table class="rm-table">
+                <tr><td>成品基层单重</td><td>${design.weight.finishedBaseWeight.toFixed(3)} 吨</td></tr>
+                <tr><td>成品复层单重</td><td>${design.weight.finishedCladdingWeight.toFixed(3)} 吨</td></tr>
+                <tr><td>成品单重</td><td><strong>${design.weight.finishedUnitWeight.toFixed(3)} 吨</strong></td></tr>
+                <tr><td>成品总重</td><td><strong>${design.weight.finishedTotalWeight.toFixed(3)} 吨</strong></td></tr>
+              </table>
+            </div>
+            <div class="rm-block rm-summary">
+              <div class="rm-block-title">成材率</div>
+              <table class="rm-table">
+                <tr><td>基层成材率</td><td>${(design.yield.baseYield * 100).toFixed(1)}%</td></tr>
+                <tr><td>复层成材率</td><td>${(design.yield.claddingYield * 100).toFixed(1)}%</td></tr>
+                <tr><td>合计成材率</td><td><strong>${(design.yield.totalYield * 100).toFixed(1)}%</strong></td></tr>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
   },
 
   removeItem(idx) {

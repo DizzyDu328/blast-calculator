@@ -179,6 +179,133 @@ function getExplosionPrice(claddingThickness, grade) {
   return DEFAULTS.explosionPrice;
 }
 
+// ========== 原材料尺寸设计 ==========
+
+/**
+ * 根据爆炸成品尺寸设计原材料(采购)尺寸
+ * 不需要价格参数, 仅计算尺寸/面积/重量
+ * @param {Object} input - 成品参数
+ * @returns {Object} 原材料尺寸设计结果
+ */
+function designRawMaterial(input) {
+  const defaultMargins = getDefaultMargins(input.grade || '');
+
+  const {
+    grade = '',
+    claddingThickness: D = 0,
+    baseThickness: F = 0,
+    width: H = 0,
+    length: I = 0,
+    sheets: S = 1,
+    purchaseCladdingThickness: E = D,
+    purchaseBaseThickness: G = F,
+    baseWidening: J = defaultMargins.baseWidening,
+    baseLengthening: N = defaultMargins.baseLengthening,
+    claddingExtraMargin = defaultMargins.claddingExtraMargin,
+    isCircular = false,
+  } = input;
+
+  // 密度
+  const R = getCladdingDensity(grade);
+  const baseDensity = getBaseDensity(grade);
+  const category = MATERIAL_CATEGORY[getCladdingMaterial(grade)] || 'austenitic';
+
+  // 圆形板面积计算 (mm²)
+  const circleArea = (d) => Math.PI * (d / 2) * (d / 2);
+  const finishedArea_mm2 = isCircular ? circleArea(H) : H * I;
+
+  // ========== 余量与采购尺寸 ==========
+  const C = D + F;                    // 成品总厚度 mm
+  const L = J + claddingExtraMargin;  // 复层加宽 mm
+  const M = H + L;                    // 复层采购宽度 mm
+  const P = N + claddingExtraMargin;  // 复层加长 mm
+  const Q = I + P;                    // 复层采购长度 mm
+  const K = H + J;                    // 基层采购宽度 mm
+  const O = I + N;                    // 基层采购长度 mm
+
+  // ========== 面积 ==========
+  const explosionArea_mm2 = K * O;                    // 爆炸面积(采购矩形) mm²
+  const finishedAreaRect_mm2 = H * I;                // 成品矩形面积 mm²
+  const explosionAreaPerSheet = explosionArea_mm2 / 1000000; // ㎡
+  const finishedAreaPerSheet = finishedArea_mm2 / 1000000;   // ㎡ (圆形用πr²)
+  const totalFinishedArea = finishedAreaPerSheet * S;
+
+  // ========== 重量 (采购尺寸始终按矩形) ==========
+  const purchaseBaseWeight = Math.round(baseDensity * G * K * O / 1000000000 * 1000) / 1000;
+  const purchaseCladdingWeight = Math.round(E * M * Q * R / 1000000000 * 1000) / 1000;
+  const purchaseTotalWeight = purchaseBaseWeight + purchaseCladdingWeight;
+
+  const finishedBaseWeight = Math.round(baseDensity * F * finishedArea_mm2 / 1000000000 * 1000) / 1000;
+  const finishedCladdingWeight = Math.round(D * finishedArea_mm2 * R / 1000000000 * 1000) / 1000;
+  const finishedUnitWeight = finishedBaseWeight + finishedCladdingWeight;
+  const finishedTotalWeight = finishedUnitWeight * S;
+
+  // ========== 成材率 ==========
+  const baseYield = purchaseBaseWeight > 0 ? finishedBaseWeight / purchaseBaseWeight : 0;
+  const claddingYield = purchaseCladdingWeight > 0 ? finishedCladdingWeight / purchaseCladdingWeight : 0;
+  const totalYield = purchaseTotalWeight > 0 ? finishedUnitWeight / purchaseTotalWeight : 0;
+
+  return {
+    input: {
+      grade,
+      claddingMaterial: getCladdingMaterial(grade),
+      baseMaterial: getBaseMaterial(grade),
+      claddingThickness: D,
+      baseThickness: F,
+      totalThickness: C,
+      width: H,
+      length: I,
+      diameter: isCircular ? H : null,
+      sheets: S,
+      isCircular,
+      purchaseCladdingThickness: E,
+      purchaseBaseThickness: G,
+    },
+    margins: {
+      baseWidening: J,
+      baseLengthening: N,
+      claddingExtraMargin: claddingExtraMargin,
+      claddingWidening: L,
+      claddingLengthening: P,
+      marginSource: category === 'titanium' ? '钛材标准余量' : '不锈钢标准余量',
+    },
+    rawMaterial: {
+      // 基层(碳钢)采购尺寸
+      basePurchaseWidth: K,
+      basePurchaseLength: O,
+      basePurchaseThickness: G,
+      // 复层(不锈钢/钛)采购尺寸
+      claddingPurchaseWidth: M,
+      claddingPurchaseLength: Q,
+      claddingPurchaseThickness: E,
+    },
+    area: {
+      explosionAreaPerSheet,   // 单板爆炸面积(矩形采购面) ㎡
+      finishedAreaPerSheet,    // 单板成品面积 ㎡ (圆形用πr²)
+      totalFinishedArea,       // 成品总面积 ㎡
+    },
+    weight: {
+      purchaseBaseWeight,
+      purchaseCladdingWeight,
+      purchaseTotalWeight,
+      finishedBaseWeight,
+      finishedCladdingWeight,
+      finishedUnitWeight,
+      finishedTotalWeight,
+    },
+    yield: {
+      baseYield,
+      claddingYield,
+      totalYield,
+    },
+    material: {
+      claddingDensity: R,
+      baseDensity: baseDensity,
+      category: category,
+    },
+  };
+}
+
 // ========== 核心成本计算 ==========
 
 /**
@@ -431,6 +558,7 @@ if (typeof window !== 'undefined') {
     calculateCost,
     calculateBatch,
     summarizeResults,
+    designRawMaterial,
     getCladdingMaterial,
     getBaseMaterial,
     getCladdingDensity,

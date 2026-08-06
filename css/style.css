@@ -641,3 +641,145 @@ body {
   padding-bottom: 6px;
   border-bottom: 1px solid var(--border);
 }
+
+/* ========== 原材料尺寸设计 ========== */
+.rm-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 16px;
+  background: var(--bg-white);
+}
+
+.rm-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.rm-index {
+  width: 24px;
+  height: 24px;
+  background: var(--primary-light);
+  color: var(--primary);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rm-grade {
+  font-size: 14px;
+}
+
+.rm-shape {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 2px 8px;
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.rm-flow {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+
+.rm-block {
+  flex: 1;
+  min-width: 180px;
+  border-radius: var(--radius-sm);
+  padding: 12px;
+}
+
+.rm-block-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.rm-finished {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
+.rm-finished .rm-block-title {
+  color: #15803d;
+}
+
+.rm-margin {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+}
+
+.rm-margin .rm-block-title {
+  color: #b45309;
+}
+
+.rm-raw {
+  background: var(--primary-light);
+  border: 1px solid #93c5fd;
+}
+
+.rm-raw .rm-block-title {
+  color: var(--primary-dark);
+}
+
+.rm-summary {
+  background: #f8fafc;
+  border: 1px solid var(--border);
+}
+
+.rm-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  color: var(--text-light);
+  min-width: 24px;
+}
+
+.rm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.rm-table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+  color: var(--text);
+}
+
+.rm-table td:first-child {
+  color: var(--text-secondary);
+}
+
+.rm-table td:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.rm-table tr:last-child td {
+  border-bottom: none;
+}
+
+@media (max-width: 768px) {
+  .rm-flow {
+    flex-direction: column;
+  }
+  .rm-arrow {
+    transform: rotate(90deg);
+    min-height: 24px;
+  }
+}
