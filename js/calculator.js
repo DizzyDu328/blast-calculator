@@ -1131,6 +1131,147 @@ function designSharedLayout(allItems = []) {
     groups.push(group);
   }
 
+  // ===== 跨产品共版倍尺 =====
+  // 按基层牌号+基层厚度分组（同组可共用基板）
+  const mbCandidatesByGroup = new Map();
+
+  allItems.forEach((item, index) => {
+    if (item.isCircular) return;
+    const baseMaterial = getBaseMaterial(item.grade);
+    const key = `${baseMaterial}|${item.baseThickness}`;
+    if (!mbCandidatesByGroup.has(key)) mbCandidatesByGroup.set(key, []);
+
+    const currentLayout = layoutByIndex[index];
+    const adj = currentLayout.adjustedDims;
+
+    mbCandidatesByGroup.get(key).push({
+      index,
+      item,
+      finishedWidth: item.width,
+      finishedLength: item.length,
+      sheets: Math.max(1, Number(item.sheets) || 1),
+      basePurchaseWidth: adj.basePurchaseWidth,
+      basePurchaseLength: adj.basePurchaseLength,
+      claddingPurchaseWidth: adj.claddingPurchaseWidth,
+      claddingPurchaseLength: adj.claddingPurchaseLength,
+    });
+  });
+
+  for (const [mbKey, mbMembers] of mbCandidatesByGroup) {
+    // 需要至少2个不同产品
+    if (mbMembers.length < 2) continue;
+
+    // 按成品宽度子分组（相同宽度才能沿长度方向共板）
+    const byWidth = new Map();
+    mbMembers.forEach(m => {
+      if (!byWidth.has(m.finishedWidth)) byWidth.set(m.finishedWidth, []);
+      byWidth.get(m.finishedWidth).push(m);
+    });
+
+    for (const [width, mbGroup] of byWidth) {
+      const totalPieces = mbGroup.reduce((sum, m) => sum + m.sheets, 0);
+      if (totalPieces < 2) continue;
+
+      // 收集所有成品件
+      const mbMargins = { baseL: 40, cutGap: 10 };
+      const pieces = [];
+      mbGroup.forEach(m => {
+        for (let i = 0; i < m.sheets; i++) {
+          pieces.push({ memberIndex: m.index, length: m.finishedLength });
+        }
+      });
+      pieces.sort((a, b) => b.length - a.length);
+
+      // 尝试不同的每板件数
+      let mbBest = null;
+      for (let perPlate = 2; perPlate <= Math.min(pieces.length, 4); perPlate++) {
+        // 检查 perPlate 件最长成品是否能放下
+        const longestCombo = pieces.slice(0, perPlate).reduce((sum, p, i) =>
+          sum + p.length + (i > 0 ? mbMargins.cutGap : 0), 2 * mbMargins.baseL);
+        if (longestCombo > MAX_PURCHASE_LENGTH) continue;
+
+        // 贪心排列：最长配最短
+        const remaining = [...pieces];
+        const plates = [];
+        while (remaining.length > 0) {
+          const platePieces = [remaining.shift()];
+          let plateLength = platePieces[0].length + 2 * mbMargins.baseL;
+          while (platePieces.length < perPlate && remaining.length > 0) {
+            const shortest = remaining[remaining.length - 1];
+            const newLength = plateLength + shortest.length + mbMargins.cutGap;
+            if (newLength > MAX_PURCHASE_LENGTH) break;
+            platePieces.push(remaining.pop());
+            plateLength = newLength;
+          }
+          plates.push({ pieces: platePieces, length: Math.round(plateLength) });
+        }
+
+        // 计算节省（对比每件独立1板）
+        const individualPlates = totalPieces;
+        const savings = individualPlates - plates.length;
+        if (savings <= 0) continue;
+
+        if (!mbBest || plates.length < mbBest.plates.length) {
+          mbBest = { perPlate, plates, savings };
+        }
+      }
+
+      if (!mbBest) continue;
+
+      // 计算各产品的加权平均板长和板数
+      const productInfo = new Map();
+      mbGroup.forEach(m => productInfo.set(m.index, { plateLengths: [], plateCount: 0 }));
+
+      mbBest.plates.forEach(plate => {
+        const membersOnPlate = new Set(plate.pieces.map(p => p.memberIndex));
+        membersOnPlate.forEach(memberIndex => {
+          const info = productInfo.get(memberIndex);
+          info.plateLengths.push(plate.length);
+          info.plateCount++;
+        });
+      });
+
+      const mbGroupId = `mb_${groups.length + 1}`;
+      groups.push({
+        id: mbGroupId,
+        type: 'multiblank',
+        key: `${mbKey}|w${width}`,
+        baseMaterial: getBaseMaterial(mbGroup[0].item.grade),
+        baseThickness: mbGroup[0].item.baseThickness,
+        finishedWidth: width,
+        productIndexes: mbGroup.map(m => m.index),
+        perPlate: mbBest.perPlate,
+        platesNeeded: mbBest.plates.length,
+        individualPlates: totalPieces,
+        savings: mbBest.savings,
+        plateWidth: mbGroup[0].basePurchaseWidth,
+        arrangement: mbBest.plates.map((p, i) =>
+          `板${i + 1}: ${p.pieces.map(pc => pc.length + 'mm').join(' + ')}`),
+      });
+
+      // 更新各产品的 adjustedDims
+      mbGroup.forEach(m => {
+        const original = layoutByIndex[m.index];
+        const existingAdj = original.adjustedDims;
+        const info = productInfo.get(m.index);
+        const avgPlateLength = Math.round(info.plateLengths.reduce((a, b) => a + b, 0) / info.plateCount);
+        const cladExtraL = m.claddingPurchaseLength - m.basePurchaseLength;
+
+        const updatedDims = {
+          ...existingAdj,
+          basePurchaseLength: avgPlateLength,
+          claddingPurchaseLength: avgPlateLength + cladExtraL,
+          materialCount: info.plateCount,
+          adjusted: true,
+          sharedMultiBlank: true,
+          sharedMultiBlankGroupId: mbGroupId,
+          adjustmentReason: `${existingAdj.adjustmentReason ? existingAdj.adjustmentReason + '; ' : ''}跨产品倍尺: 基层采购长 ${m.basePurchaseLength}mm → ${avgPlateLength}mm (${mbBest.perPlate}件/板, ${info.plateCount}板)`,
+        };
+        layoutByIndex[m.index] = { ...original, adjustedDims: updatedDims };
+      });
+    }
+  }
+
   return { layoutByIndex, groups };
 }
 

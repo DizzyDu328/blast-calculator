@@ -398,22 +398,45 @@ const App = {
 
   renderSharedLayoutSummary(groups) {
     if (!groups || groups.length === 0) return '';
-    return `
-      <div class="shared-layout-summary">
-        <div class="shared-layout-title">同订单共版条带汇总</div>
-        ${groups.map(group => `
+    const weldingGroups = groups.filter(g => g.type !== 'multiblank');
+    const mbGroups = groups.filter(g => g.type === 'multiblank');
+    let html = '<div class="shared-layout-summary">';
+
+    if (weldingGroups.length > 0) {
+      html += '<div class="shared-layout-title">同订单共版拼焊汇总</div>';
+      weldingGroups.forEach(group => {
+        html += `
           <div class="shared-layout-group">
-            <div><span class="badge badge-blue">共版组</span> <strong>${group.claddingMaterial} ${group.claddingThickness}mm</strong> · 产品第${group.productIndexes.map(i => i + 1).join('、')}项</div>
+            <div><span class="badge badge-red">共版拼焊</span> <strong>${group.claddingMaterial} ${group.claddingThickness}mm</strong> · 产品第${group.productIndexes.map(i => i + 1).join('、')}项</div>
             <table class="rm-table">
               <tr><td>统一标准条带宽</td><td><strong>${group.standardWidth} mm</strong></td></tr>
-              <tr><td>合计条带需求</td><td>${group.totalStripDemand} 条（按各产品张数合计）</td></tr>
+              <tr><td>合计条带需求</td><td>${group.totalStripDemand} 条</td></tr>
               <tr><td>实际需求面积</td><td>${group.totalDemandArea.toFixed(2)} ㎡</td></tr>
               <tr><td>按标准宽采购面积</td><td>${group.totalPurchaseArea.toFixed(2)} ㎡</td></tr>
               <tr><td>统一分配余料</td><td>${group.wasteArea.toFixed(2)} ㎡</td></tr>
             </table>
-          </div>
-        `).join('')}
-      </div>`;
+          </div>`;
+      });
+    }
+
+    if (mbGroups.length > 0) {
+      html += '<div class="shared-layout-title" style="margin-top:12px;">同订单共版倍尺汇总</div>';
+      mbGroups.forEach(group => {
+        html += `
+          <div class="shared-layout-group">
+            <div><span class="badge badge-amber">共版倍尺</span> <strong>${group.baseMaterial} ${group.baseThickness}mm</strong> · 成品宽${group.finishedWidth}mm · 产品第${group.productIndexes.map(i => i + 1).join('、')}项</div>
+            <table class="rm-table">
+              <tr><td>每板排列</td><td><strong>${group.perPlate} 件/板</strong></td></tr>
+              <tr><td>共需基板</td><td><strong>${group.platesNeeded} 板</strong> <span style="color:var(--text-tertiary);font-size:11px;">(独立需${group.individualPlates}板)</span></td></tr>
+              <tr><td>节省板数</td><td><strong style="color:var(--success)">节省 ${group.savings} 板</strong></td></tr>
+              <tr><td>排列方案</td><td style="font-size:11px;">${group.arrangement.join('；')}</td></tr>
+            </table>
+          </div>`;
+      });
+    }
+
+    html += '</div>';
+    return html;
   },
 
   renderRawMaterialDesign() {
