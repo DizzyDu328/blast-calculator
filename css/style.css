@@ -847,6 +847,38 @@ body {
   box-shadow: 0 0 0 2px var(--primary-light);
 }
 
+/* ========== 同订单共版条带 ========== */
+.shared-layout-summary {
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border: 1px solid #bfdbfe;
+  border-radius: var(--radius);
+  background: #eff6ff;
+}
+
+.shared-layout-title {
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary-dark);
+}
+
+.shared-layout-group {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid #dbeafe;
+  border-radius: var(--radius-sm);
+  background: var(--bg-white);
+}
+
+.shared-layout-group:first-of-type {
+  margin-top: 0;
+}
+
+.shared-layout-group .rm-table {
+  margin-top: 6px;
+}
+
 /* ========== 拼焊/倍尺方案 ========== */
 .lp-item {
   border: 1px solid var(--border);

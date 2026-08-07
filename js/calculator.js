@@ -317,8 +317,8 @@ function getMarginsByStandard(grade, claddingThickness, baseThickness, width, le
     let baseW = 60, baseL = 100, cladW = 40, cladL = 40;
     let notes = ['钛材标准余量'];
     if (options.sampling) {
-      baseL += 150; cladL += 150;
-      notes.push('取样+150mm');
+      baseL += 120; cladL += 120;
+      notes.push('取样+120mm');
     }
     return {
       baseWidening: baseW,
@@ -361,11 +361,11 @@ function getMarginsByStandard(grade, claddingThickness, baseThickness, width, le
   let claddingLengthening = claddingWidening;
   let notes = [conditionDesc];
 
-  // 取样: 额外+150mm
+  // 取样: 额外+120mm
   if (options.sampling) {
-    baseLengthening += 150;
-    claddingLengthening += 150;
-    notes.push('取样+150mm');
+    baseLengthening += 120;
+    claddingLengthening += 120;
+    notes.push('取样+120mm');
   }
 
   // ASME SA264: 基层加厚1mm且要求正公差
@@ -525,7 +525,8 @@ function designRawMaterial(input) {
   const Q = I + claddingLengthening;  // 复层采购长度 mm
 
   // ========== 面积 ==========
-  const explosionArea_mm2 = K * O;                    // 爆炸面积(采购矩形) mm²
+  // 爆炸面积使用复层采购尺寸(复层是爆炸面), 非基层尺寸
+  const explosionArea_mm2 = M * Q;                    // 爆炸面积(复层采购矩形) mm²
   const explosionAreaPerSheet = explosionArea_mm2 / 1000000; // ㎡
   const finishedAreaPerSheet = finishedArea_mm2 / 1000000;   // ㎡ (圆形用πr²)
   const totalFinishedArea = finishedAreaPerSheet * S;
@@ -684,7 +685,8 @@ function calculateCost(input) {
   const Q = I + claddingLengthening;  // 复层采购长度 mm
 
   // ========== 面积计算 ==========
-  const T = K * O / 1000000;          // 单板爆炸面积 ㎡ (采购尺寸, 始终矩形)
+  // 爆炸面积使用复层采购尺寸(复层是爆炸面), 非基层尺寸
+  const T = M * Q / 1000000;          // 单板爆炸面积 ㎡ (复层采购尺寸, 始终矩形)
   const U = finishedArea_mm2 / 1000000; // 单板成品面积 ㎡ (圆形板用π*r²)
   const V = U * S;                     // 成品总面积 ㎡
 
@@ -974,6 +976,162 @@ function designLayoutPlan(input) {
       adjustmentReason: reasons.join('; '),
     },
   };
+}
+
+/**
+ * 同一订单跨产品共版条带设计。
+ * 仅合并相同复层牌号、相同复层厚度且需拼焊的矩形板；基层和长度仍按各产品自身规格计算。
+ * 每组统一选择一个标准板宽，并按各产品的实际采购宽度分配条带数。
+ * @param {Array<Object>} allItems - 同一订单内的全部成品参数
+ * @returns {Object} { layoutByIndex, groups }
+ */
+function designSharedLayout(allItems = []) {
+  const layoutByIndex = allItems.map(item => designLayoutPlan(item));
+  const candidatesByGroup = new Map();
+
+  allItems.forEach((item, index) => {
+    if (item.isCircular) return;
+    const raw = designRawMaterial(item);
+    const claddingMaterial = getCladdingMaterial(item.grade);
+    const category = MATERIAL_CATEGORY[claddingMaterial] || 'austenitic';
+    const claddingWidth = raw.rawMaterial.claddingPurchaseWidth;
+
+    // 钛材不使用不锈钢标准条带；宽度未超2500mm时无需拼焊。
+    if (category === 'titanium' || claddingWidth <= 2500) return;
+
+    const key = `${claddingMaterial}|${item.claddingThickness}`;
+    if (!candidatesByGroup.has(key)) candidatesByGroup.set(key, []);
+    candidatesByGroup.get(key).push({
+      index,
+      item,
+      raw,
+      claddingMaterial,
+      claddingWidth,
+      claddingLength: raw.rawMaterial.claddingPurchaseLength,
+      sheets: Math.max(1, Number(item.sheets) || 1),
+    });
+  });
+
+  const groups = [];
+  for (const [key, members] of candidatesByGroup) {
+    // 单一规格继续沿用原单品拼焊方案，不标记为跨产品共版。
+    if (members.length < 2) continue;
+
+    let best = null;
+    for (const standardWidth of STANDARD_STAINLESS_WIDTHS) {
+      const allocations = [];
+      let totalStripDemand = 0;
+      let totalDemandArea = 0;
+      let totalPurchaseArea = 0;
+      let valid = true;
+
+      members.forEach(member => {
+        const stripCount = Math.ceil(member.claddingWidth / standardWidth);
+        if (stripCount < 2 || stripCount > 4) {
+          valid = false;
+          return;
+        }
+        const stripWidths = [];
+        let remaining = member.claddingWidth;
+        for (let n = 0; n < stripCount; n++) {
+          const actualWidth = n === stripCount - 1
+            ? Math.round(remaining)
+            : Math.round(member.claddingWidth / stripCount);
+          remaining -= actualWidth;
+          stripWidths.push(actualWidth);
+        }
+        const demandArea = member.claddingWidth * member.claddingLength * member.sheets / 1e6;
+        const purchaseArea = standardWidth * stripCount * member.claddingLength * member.sheets / 1e6;
+        totalStripDemand += stripCount * member.sheets;
+        totalDemandArea += demandArea;
+        totalPurchaseArea += purchaseArea;
+        allocations.push({ ...member, stripCount, stripWidths, demandArea, purchaseArea });
+      });
+
+      if (!valid) continue;
+      const wasteArea = totalPurchaseArea - totalDemandArea;
+      const score = wasteArea * 1000 + totalStripDemand;
+      if (!best || score < best.score) {
+        best = { standardWidth, allocations, totalStripDemand, totalDemandArea, totalPurchaseArea, wasteArea, score };
+      }
+    }
+
+    if (!best) continue;
+
+    const groupId = `shared_${groups.length + 1}`;
+    const group = {
+      id: groupId,
+      key,
+      claddingMaterial: members[0].claddingMaterial,
+      claddingThickness: members[0].item.claddingThickness,
+      standardWidth: best.standardWidth,
+      productIndexes: members.map(member => member.index),
+      totalStripDemand: best.totalStripDemand,
+      totalDemandArea: best.totalDemandArea,
+      totalPurchaseArea: best.totalPurchaseArea,
+      wasteArea: best.wasteArea,
+      allocations: [],
+    };
+
+    best.allocations.forEach(allocation => {
+      const original = layoutByIndex[allocation.index];
+      const plansWithoutIndividualWelding = original.plans.filter(plan => plan.type !== 'welding');
+      const weldPositions = allocation.stripWidths.slice(0, -1).reduce((positions, width) => {
+        const previous = positions.length ? positions[positions.length - 1] : 0;
+        positions.push(previous + width);
+        return positions;
+      }, []);
+      const totalWeldLength = (allocation.stripCount - 1) * allocation.claddingLength;
+      const sharedWeldPlan = {
+        type: 'welding',
+        title: '同订单共版拼焊方案',
+        reason: `与第${group.productIndexes.map(i => i + 1).join('、')}项共用${best.standardWidth}mm标准条带`,
+        sharedLayout: true,
+        sharedGroupId: groupId,
+        stripCount: allocation.stripCount,
+        strips: allocation.stripWidths.map((actualWidth, idx) => ({
+          index: idx + 1,
+          standardWidth: best.standardWidth,
+          actualWidth,
+          wasteWidth: best.standardWidth - actualWidth,
+        })),
+        weldPositions,
+        totalWeldLength,
+        weldLength_m: (totalWeldLength / 1000).toFixed(1),
+        weldCost: Math.round(totalWeldLength / 1000 * PROCESSING_FEES.welding.price),
+        weldPricePerM: PROCESSING_FEES.welding.price,
+        wasteWidth: best.standardWidth * allocation.stripCount - allocation.claddingWidth,
+        wasteArea: (best.standardWidth * allocation.stripCount - allocation.claddingWidth) * allocation.claddingLength / 1e6,
+      };
+      plansWithoutIndividualWelding.unshift(sharedWeldPlan);
+
+      const adjustedDims = {
+        ...original.adjustedDims,
+        claddingPurchaseWidth: best.standardWidth * allocation.stripCount,
+        adjusted: true,
+        sharedLayout: true,
+        sharedGroupId: groupId,
+        sharedStandardWidth: best.standardWidth,
+        sharedStripCount: allocation.stripCount,
+        adjustmentReason: `${original.adjustedDims.adjustmentReason ? original.adjustedDims.adjustmentReason + '; ' : ''}同订单共版: ${allocation.stripCount}×${best.standardWidth}=${best.standardWidth * allocation.stripCount}mm`,
+      };
+      layoutByIndex[allocation.index] = { ...original, plans: plansWithoutIndividualWelding, adjustedDims };
+      group.allocations.push({
+        index: allocation.index,
+        sheets: allocation.sheets,
+        claddingWidth: allocation.claddingWidth,
+        claddingLength: allocation.claddingLength,
+        stripCount: allocation.stripCount,
+        stripWidths: allocation.stripWidths,
+        demandArea: allocation.demandArea,
+        purchaseArea: allocation.purchaseArea,
+      });
+    });
+
+    groups.push(group);
+  }
+
+  return { layoutByIndex, groups };
 }
 
 /**
@@ -1766,6 +1924,7 @@ if (typeof window !== 'undefined') {
     summarizeResults,
     designRawMaterial,
     designLayoutPlan,
+    designSharedLayout,
     generateWeldingDrawing,
     calculateProcessCost,
     getCladdingMaterial,

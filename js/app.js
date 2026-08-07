@@ -60,6 +60,7 @@ const App = {
     keyOrder: false,    // 重点订单
     sampling: false,    // 取样
     asmeSA264: false,   // ASME SA264标准
+    sharedLayout: true, // 同订单内同复层牌号、厚度的条带统一分配
   },
   densityOverrides: {},  // 密度手动覆盖 { idx: { cladding: x, base: y } }
   targetMarginRate: 0.15, // 建议售价目标利润率
@@ -237,6 +238,7 @@ const App = {
         this.designOptions.keyOrder = keyOrderCb.checked;
         this.renderRawMaterialDesign();
         this.renderLayoutPlan();
+        this.renderProcessCost();
       });
     }
 
@@ -247,6 +249,7 @@ const App = {
         this.designOptions.sampling = samplingCb.checked;
         this.renderRawMaterialDesign();
         this.renderLayoutPlan();
+        this.renderProcessCost();
       });
     }
 
@@ -257,6 +260,19 @@ const App = {
         this.designOptions.asmeSA264 = asmeCb.checked;
         this.renderRawMaterialDesign();
         this.renderLayoutPlan();
+        this.renderProcessCost();
+      });
+    }
+
+    // 同订单跨产品共版拼焊
+    const sharedLayoutCb = document.getElementById('sharedLayoutCheckbox');
+    if (sharedLayoutCb) {
+      sharedLayoutCb.checked = this.designOptions.sharedLayout;
+      sharedLayoutCb.addEventListener('change', () => {
+        this.designOptions.sharedLayout = sharedLayoutCb.checked;
+        this.renderRawMaterialDesign();
+        this.renderLayoutPlan();
+        this.renderProcessCost();
       });
     }
 
@@ -369,6 +385,37 @@ const App = {
 
   // ========== 原材料尺寸设计 ==========
 
+  getLayoutBundle() {
+    const inputs = this.parsedItems.map(item => ({ ...item, options: this.designOptions }));
+    if (this.designOptions.sharedLayout && inputs.length > 1) {
+      return CostCalculator.designSharedLayout(inputs);
+    }
+    return {
+      layoutByIndex: inputs.map(input => CostCalculator.designLayoutPlan(input)),
+      groups: [],
+    };
+  },
+
+  renderSharedLayoutSummary(groups) {
+    if (!groups || groups.length === 0) return '';
+    return `
+      <div class="shared-layout-summary">
+        <div class="shared-layout-title">同订单共版条带汇总</div>
+        ${groups.map(group => `
+          <div class="shared-layout-group">
+            <div><span class="badge badge-blue">共版组</span> <strong>${group.claddingMaterial} ${group.claddingThickness}mm</strong> · 产品第${group.productIndexes.map(i => i + 1).join('、')}项</div>
+            <table class="rm-table">
+              <tr><td>统一标准条带宽</td><td><strong>${group.standardWidth} mm</strong></td></tr>
+              <tr><td>合计条带需求</td><td>${group.totalStripDemand} 条（按各产品张数合计）</td></tr>
+              <tr><td>实际需求面积</td><td>${group.totalDemandArea.toFixed(2)} ㎡</td></tr>
+              <tr><td>按标准宽采购面积</td><td>${group.totalPurchaseArea.toFixed(2)} ㎡</td></tr>
+              <tr><td>统一分配余料</td><td>${group.wasteArea.toFixed(2)} ㎡</td></tr>
+            </table>
+          </div>
+        `).join('')}
+      </div>`;
+  },
+
   renderRawMaterialDesign() {
     const card = document.getElementById('rawMaterialCard');
     const container = document.getElementById('rawMaterialDesign');
@@ -380,16 +427,14 @@ const App = {
     }
 
     card.style.display = '';
+    const layoutBundle = this.getLayoutBundle();
 
-    container.innerHTML = this.parsedItems.map((item, idx) => {
+    container.innerHTML = this.renderSharedLayoutSummary(layoutBundle.groups) + this.parsedItems.map((item, idx) => {
       const design = CostCalculator.designRawMaterial({
         ...item,
         options: this.designOptions,
       });
-      const layout = CostCalculator.designLayoutPlan({
-        ...item,
-        options: this.designOptions,
-      });
+      const layout = layoutBundle.layoutByIndex[idx];
       const adj = layout.adjustedDims;
       const hasAdj = adj && adj.adjusted;
       const shapeIcon = design.input.isCircular ? ' <span class="badge badge-blue">圆</span>' : '';
@@ -493,6 +538,7 @@ const App = {
                 <tr><td>单板爆炸面积</td><td>${design.area.explosionAreaPerSheet.toFixed(2)} ㎡ ${design.input.isCircular ? '(矩形)' : ''}</td></tr>
                 <tr><td>单板成品面积</td><td>${design.area.finishedAreaPerSheet.toFixed(2)} ㎡ ${design.input.isCircular ? '(πr²)' : ''}</td></tr>
                 <tr><td>成品总面积</td><td><strong>${design.area.totalFinishedArea.toFixed(2)} ㎡</strong></td></tr>
+                ${hasAdj ? `<tr><td>爆炸面积(排版后)</td><td><strong style="color:var(--warning);">${(adjCladW * adjCladL * adj.materialCount / 1e6).toFixed(2)} ㎡</strong></td></tr>` : ''}
               </table>
             </div>
             <div class="rm-block rm-summary">
@@ -541,6 +587,7 @@ const App = {
     }
     this.renderRawMaterialDesign();
     this.renderLayoutPlan();
+    this.renderProcessCost();
   },
 
   // 圆形板直径修改：同时更新 diameter 和 width
@@ -551,6 +598,7 @@ const App = {
     this.parsedItems[idx].diameter = v;
     this.renderRawMaterialDesign();
     this.renderLayoutPlan();
+    this.renderProcessCost();
   },
 
   // ========== 拼焊/倍尺方案设计 ==========
@@ -566,12 +614,10 @@ const App = {
     }
 
     card.style.display = '';
+    const layoutBundle = this.getLayoutBundle();
 
-    container.innerHTML = this.parsedItems.map((item, idx) => {
-      const planResult = CostCalculator.designLayoutPlan({
-        ...item,
-        options: this.designOptions,
-      });
+    container.innerHTML = this.renderSharedLayoutSummary(layoutBundle.groups) + this.parsedItems.map((item, idx) => {
+      const planResult = layoutBundle.layoutByIndex[idx];
 
       const plansHtml = planResult.plans.map((plan, pIdx) => {
         const drawing = CostCalculator.generateWeldingDrawing(plan, planResult.rawMaterial, planResult.input);
@@ -929,6 +975,9 @@ const App = {
       this.priceConfig.explosionPrice = val ? parseFloat(val) : null;
     }
 
+    // 同订单内相同复层牌号、厚度的拼焊条带统一分配
+    const layoutBundle = this.getLayoutBundle();
+
     // 为每条订单计算工序成本
     this.processResults = this.parsedItems.map((item, idx) => {
       const claddingDensity = this.getDensity(idx, 'cladding');
@@ -938,11 +987,7 @@ const App = {
         claddingDensityOverride: claddingDensity,
         baseDensityOverride: baseDensity,
       });
-      const layoutPlan = CostCalculator.designLayoutPlan({
-        ...item, options: this.designOptions,
-        claddingDensityOverride: claddingDensity,
-        baseDensityOverride: baseDensity,
-      });
+      const layoutPlan = layoutBundle.layoutByIndex[idx];
       const orderPrice = this.orderPrices[idx] || {};
       const cost = CostCalculator.calculateProcessCost(
         item, rawMaterial, layoutPlan, this.priceConfig, this.processPrices,

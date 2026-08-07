@@ -141,14 +141,17 @@
             <input type="checkbox" id="keyOrderCheckbox"> 重点订单 (薄板基层+40)
           </label>
           <label class="checkbox-label">
-            <input type="checkbox" id="samplingCheckbox"> 取样 (+150mm)
+            <input type="checkbox" id="samplingCheckbox"> 取样 (+120mm)
           </label>
           <label class="checkbox-label">
             <input type="checkbox" id="asmeCheckbox"> 执行美标 ASME SA264 (基层+1mm)
           </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="sharedLayoutCheckbox" checked> 同订单共版（合并条带）
+          </label>
         </div>
         <div class="alert alert-info">
-          放量规则：基层&lt;60mm时基层+30（重点订单+40），复层=基层+60；基层≥60mm时基层+60，复层=基层+60。取样额外+150mm，ASME基层+1mm。不锈钢常见可采购宽度: 1219/1500/1800/2000/2500mm，最长8000mm。
+          放量规则：基层&lt;60mm时基层+30（重点订单+40），复层=基层+60；基层≥60mm时基层+60，复层=基层+60。取样额外+120mm，ASME基层+1mm。不锈钢常见可采购宽度: 1219/1500/1800/2000/2500mm，最长8000mm。
         </div>
         <div id="rawMaterialDesign"></div>
       </div>
@@ -162,7 +165,7 @@
       </div>
       <div class="card-body">
         <div class="alert alert-info">
-          当覆层采购宽度超过2500mm时需拼焊设计；当采购长度超过8000mm或多张成品可合并时建议倍尺排列。下方自动生成方案和SVG图纸，图纸可右键另存为图片。
+          开启“同订单共版”后，系统会按相同复层牌号与厚度合并不同尺寸成品的条带需求，统一选择标准板宽并按各产品实际需求宽度分配；基层、长度及其他工序仍按各产品自身规格计算。下方自动生成方案和SVG图纸，图纸可右键另存为图片。
         </div>
         <div id="layoutPlanDesign"></div>
       </div>
