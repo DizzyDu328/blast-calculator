@@ -42,13 +42,22 @@ const AUTH = {
 const App = {
   parsedItems: [],      // 从文件解析出的规格
   results: [],          // 计算结果
-  priceConfig: {        // 价格参数
-    carbonSteelPrice: 4900,
-    stainlessSteelPrice: 28300,
-    quotationPerTon: 14580,
+  processResults: [],   // 工序成本计算结果
+  currentTab: 'tab1',   // 当前Tab
+  priceConfig: {        // 价格参数（无默认值，需手动填入）
+    carbonSteelPrice: 0,
+    stainlessSteelPrice: 0,
     explosionPrice: null,  // null = 自动查表
   },
+  orderPrices: {},      // 每条订单的报价 { idx: { sellingPricePerTon, totalAmount } }
+  fixedCosts: {         // 固定费用
+    labor: 970,
+    depreciation: 700,
+    electricity: 338,
+  },
+  processPrices: {},    // 工序单价覆盖（空=用默认值）
   designOptions: {      // 原材料设计选项
+    keyOrder: false,    // 重点订单
     sampling: false,    // 取样
     asmeSA264: false,   // ASME SA264标准
   },
@@ -72,6 +81,9 @@ const App = {
     document.getElementById('loginPage').classList.add('hidden');
     document.getElementById('appPage').classList.remove('hidden');
     document.getElementById('userName').textContent = user.name;
+    // 初始化第二页表格
+    this.renderExplosionPriceTable();
+    this.renderProcessPriceTable();
   },
 
   bindEvents() {
@@ -131,10 +143,24 @@ const App = {
       addManualBtn.addEventListener('click', () => this.addManualItem());
     }
 
-    // 计算按钮
-    const calcBtn = document.getElementById('calcBtn');
-    if (calcBtn) {
-      calcBtn.addEventListener('click', () => this.calculate());
+    // 圆形板勾选联动
+    const manualCircular = document.getElementById('manualCircular');
+    if (manualCircular) {
+      manualCircular.addEventListener('change', () => {
+        const isCircular = manualCircular.checked;
+        const widthLabel = document.getElementById('manualWidthLabel');
+        const lengthGroup = document.getElementById('manualLengthGroup');
+        const widthInput = document.getElementById('manualWidth');
+        if (isCircular) {
+          widthLabel.textContent = '直径 (mm)';
+          widthInput.placeholder = '如 Ф1850';
+          lengthGroup.style.display = 'none';
+        } else {
+          widthLabel.textContent = '宽度 (mm)';
+          widthInput.placeholder = '如 1600';
+          lengthGroup.style.display = '';
+        }
+      });
     }
 
     // 加载示例数据
@@ -144,11 +170,24 @@ const App = {
     }
 
     // 价格参数变化
-    ['carbonSteelPrice', 'stainlessSteelPrice', 'quotationPerTon'].forEach(id => {
+    ['carbonSteelPrice', 'stainlessSteelPrice'].forEach(id => {
       const el = document.getElementById(id);
       if (el) {
         el.addEventListener('input', () => {
           this.priceConfig[id] = parseFloat(el.value) || 0;
+          this.renderProcessCost();
+        });
+      }
+    });
+
+    // 固定费用
+    ['fixedLabor', 'fixedDepreciation', 'fixedElectricity'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        const key = id.replace('fixed', '').toLowerCase();
+        el.addEventListener('input', () => {
+          this.fixedCosts[key] = parseFloat(el.value) || 0;
+          this.renderProcessCost();
         });
       }
     });
@@ -159,6 +198,16 @@ const App = {
       explosionEl.addEventListener('input', () => {
         const val = explosionEl.value.trim();
         this.priceConfig.explosionPrice = val ? parseFloat(val) : null;
+      });
+    }
+
+    // 重点订单勾选
+    const keyOrderCb = document.getElementById('keyOrderCheckbox');
+    if (keyOrderCb) {
+      keyOrderCb.addEventListener('change', () => {
+        this.designOptions.keyOrder = keyOrderCb.checked;
+        this.renderRawMaterialDesign();
+        this.renderLayoutPlan();
       });
     }
 
@@ -180,6 +229,25 @@ const App = {
         this.renderRawMaterialDesign();
         this.renderLayoutPlan();
       });
+    }
+
+    // Tab 切换
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => this.switchTab(btn.dataset.tab));
+    });
+  },
+
+  switchTab(tabId) {
+    this.currentTab = tabId;
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tab === tabId);
+    });
+    document.querySelectorAll('.tab-content').forEach(c => {
+      c.classList.toggle('active', c.id === tabId);
+    });
+    // 切换到成本核算页时刷新工序成本
+    if (tabId === 'tab2') {
+      this.renderProcessCost();
     }
   },
 
@@ -222,9 +290,21 @@ const App = {
 
     container.innerHTML = this.parsedItems.map((item, idx) => {
       const dimText = item.isCircular
-        ? `<div class="item-field"><span class="label">直径:</span><span class="value">Ф${item.diameter || item.width}mm (圆形)</span></div>`
-        : `<div class="item-field"><span class="label">宽度:</span><span class="value">${item.width}mm</span></div>
-           <div class="item-field"><span class="label">长度:</span><span class="value">${item.length}mm</span></div>`;
+        ? `<div class="item-field">
+             <span class="label">直径:</span>
+             <input type="number" class="inline-input" value="${item.diameter || item.width}" step="1" min="1"
+               onchange="App.updateDimension(${idx}, this.value)" style="width:70px;">mm <span class="badge badge-blue">圆</span>
+           </div>`
+        : `<div class="item-field">
+             <span class="label">宽度:</span>
+             <input type="number" class="inline-input" value="${item.width}" step="1" min="1"
+               onchange="App.updateThickness(${idx}, 'width', this.value)" style="width:70px;">mm
+           </div>
+           <div class="item-field">
+             <span class="label">长度:</span>
+             <input type="number" class="inline-input" value="${item.length}" step="1" min="1"
+               onchange="App.updateThickness(${idx}, 'length', this.value)" style="width:70px;">mm
+           </div>`;
       return `
       <div class="parsed-item">
         <div class="item-index">${idx + 1}</div>
@@ -254,6 +334,8 @@ const App = {
     // 同时渲染原材料尺寸设计和拼焊方案
     this.renderRawMaterialDesign();
     this.renderLayoutPlan();
+    // 同步更新第二页工序成本
+    this.renderProcessCost();
   },
 
   // ========== 原材料尺寸设计 ==========
@@ -389,6 +471,20 @@ const App = {
     const v = parseFloat(value);
     if (isNaN(v) || v <= 0) return;
     this.parsedItems[idx][field] = field === 'sheets' ? Math.round(v) : v;
+    // 圆形板：改宽度时同步直径
+    if (field === 'width' && this.parsedItems[idx].isCircular && this.parsedItems[idx].diameter !== undefined) {
+      this.parsedItems[idx].diameter = v;
+    }
+    this.renderRawMaterialDesign();
+    this.renderLayoutPlan();
+  },
+
+  // 圆形板直径修改：同时更新 diameter 和 width
+  updateDimension(idx, value) {
+    const v = parseFloat(value);
+    if (isNaN(v) || v <= 0) return;
+    this.parsedItems[idx].width = v;
+    this.parsedItems[idx].diameter = v;
     this.renderRawMaterialDesign();
     this.renderLayoutPlan();
   },
@@ -509,21 +605,12 @@ const App = {
   },
 
   loadSampleData() {
-    // 从Excel金0804和万物生化0801加载示例数据
     this.parsedItems = [
       { grade: 'S31603+Q235B', claddingThickness: 3, baseThickness: 9, width: 1600, length: 6000, sheets: 7 },
       { grade: 'S31603+Q345R', claddingThickness: 3, baseThickness: 14, width: 1600, length: 6000, sheets: 11 },
       { grade: 'TA2+Q235B', claddingThickness: 3, baseThickness: 14, width: 1520, length: 5360, sheets: 4 },
       { grade: 'TA2+Q345R', claddingThickness: 3, baseThickness: 12, width: 1740, length: 5170, sheets: 36 },
     ];
-
-    // 更新价格参数
-    document.getElementById('carbonSteelPrice').value = 4900;
-    document.getElementById('stainlessSteelPrice').value = 28300;
-    document.getElementById('quotationPerTon').value = 14580;
-    this.priceConfig.carbonSteelPrice = 4900;
-    this.priceConfig.stainlessSteelPrice = 28300;
-    this.priceConfig.quotationPerTon = 14580;
 
     this.renderParsedItems();
 
@@ -536,11 +623,12 @@ const App = {
     const grade = document.getElementById('manualGrade').value.trim();
     const cladding = parseFloat(document.getElementById('manualCladding').value);
     const base = parseFloat(document.getElementById('manualBase').value);
+    const isCircular = document.getElementById('manualCircular').checked;
     const width = parseFloat(document.getElementById('manualWidth').value);
-    const length = parseFloat(document.getElementById('manualLength').value);
+    const length = isCircular ? width : parseFloat(document.getElementById('manualLength').value);
     const sheets = parseInt(document.getElementById('manualSheets').value) || 1;
 
-    if (!grade || !cladding || !base || !width || !length) {
+    if (!grade || !cladding || !base || !width || (!isCircular && !length)) {
       alert('请填写完整的规格参数');
       return;
     }
@@ -550,8 +638,10 @@ const App = {
       claddingThickness: cladding,
       baseThickness: base,
       width,
-      length,
+      length: isCircular ? width : length,
       sheets,
+      isCircular,
+      diameter: isCircular ? width : null,
     });
 
     this.renderParsedItems();
@@ -563,28 +653,20 @@ const App = {
     document.getElementById('manualWidth').value = '';
     document.getElementById('manualLength').value = '';
     document.getElementById('manualSheets').value = '1';
+    document.getElementById('manualCircular').checked = false;
+    document.getElementById('manualWidthLabel').textContent = '宽度 (mm)';
+    document.getElementById('manualWidth').placeholder = '如 1600';
+    document.getElementById('manualLengthGroup').style.display = '';
   },
 
   // ========== 计算 ==========
 
   calculate() {
     if (this.parsedItems.length === 0) {
-      alert('请先上传生产通知单或手动添加规格');
+      alert('请先在第一页上传生产通知单或手动添加规格');
       return;
     }
-
-    this.results = this.parsedItems.map(item => {
-      return CostCalculator.calculateCost({
-        ...item,
-        options: this.designOptions,
-        carbonSteelPrice: this.priceConfig.carbonSteelPrice,
-        stainlessSteelPrice: this.priceConfig.stainlessSteelPrice,
-        quotationPerTon: this.priceConfig.quotationPerTon,
-        explosionPrice: this.priceConfig.explosionPrice || undefined,
-      });
-    });
-
-    this.renderResults();
+    this.renderProcessCost();
   },
 
   // ========== 结果展示 ==========
@@ -593,166 +675,391 @@ const App = {
     const resultSection = document.getElementById('resultSection');
     resultSection.classList.remove('hidden');
 
-    // 汇总统计
-    const summary = CostCalculator.summarizeResults(this.results);
-    document.getElementById('summarySheets').textContent = summary.totalSheets;
-    document.getElementById('summaryArea').textContent = summary.totalArea.toFixed(1);
-    document.getElementById('summaryWeight').textContent = summary.totalWeight.toFixed(2);
-    document.getElementById('summaryCost').textContent = summary.totalCost.toFixed(0);
-    document.getElementById('summaryRevenue').textContent = summary.totalRevenue.toFixed(0);
-    document.getElementById('summaryProfit').textContent = summary.totalGrossProfit.toFixed(0);
+    const results = this.processResults;
+    let totalWeight = 0, totalCost = 0, totalRevenue = 0, totalProfit = 0, totalSheets = 0;
 
-    // 毛利颜色
+    results.forEach(pr => {
+      totalSheets += pr.item.sheets || 0;
+      totalWeight += pr.cost.finished.R_total;
+      totalCost += pr.cost.cost.BM;
+      if (pr.cost.pricing.hasPrice) {
+        totalRevenue += pr.cost.pricing.T;
+        totalProfit += pr.cost.pricing.U;
+      }
+    });
+
+    document.getElementById('summarySheets').textContent = totalSheets;
+    document.getElementById('summaryWeight').textContent = totalWeight.toFixed(2);
+    document.getElementById('summaryCost').textContent = totalCost.toFixed(0);
+    document.getElementById('summaryRevenue').textContent = totalRevenue.toFixed(0);
+    document.getElementById('summaryProfit').textContent = totalProfit.toFixed(0);
+
     const profitCard = document.getElementById('summaryProfitCard');
-    if (summary.totalGrossProfit >= 0) {
+    if (totalProfit >= 0) {
       profitCard.className = 'stat-card profit';
     } else {
       profitCard.className = 'stat-card loss';
     }
-
-    // 明细表格
-    this.renderResultTable();
-
-    // 滚动到结果
-    resultSection.scrollIntoView({ behavior: 'smooth' });
-  },
-
-  renderResultTable() {
-    const tbody = document.getElementById('resultTableBody');
-    tbody.innerHTML = this.results.map((r, idx) => {
-      const profitClass = r.profit.grossProfitPerTon >= 0 ? 'badge-green' : 'badge-red';
-      const profitText = r.profit.grossProfitPerTon >= 0 ? '盈利' : '亏损';
-      const shapeIcon = r.input.isCircular ? ' <span class="badge badge-blue">圆</span>' : '';
-      const dimText = r.input.isCircular
-        ? `Ф${r.input.width}`
-        : `${r.input.width}×${r.input.length}`;
-      return `
-        <tr>
-          <td>${idx + 1}</td>
-          <td><strong>${r.input.grade}</strong>${shapeIcon}</td>
-          <td class="num">${r.input.claddingThickness}</td>
-          <td class="num">${r.input.baseThickness}</td>
-          <td class="num" colspan="2">${dimText}</td>
-          <td class="num">${r.input.sheets}</td>
-          <td class="num">${r.weight.finishedUnitWeight.toFixed(3)}</td>
-          <td class="num">${r.weight.finishedTotalWeight.toFixed(3)}</td>
-          <td class="num">${r.area.totalFinishedArea.toFixed(2)}</td>
-          <td class="num">${r.material.explosionPrice}</td>
-          <td class="num">${r.cost.materialCostPerTon.toFixed(0)}</td>
-          <td class="num">${r.cost.explosionCostPerTon.toFixed(0)}</td>
-          <td class="num">${r.cost.totalCostPerTon.toFixed(0)}</td>
-          <td class="num"><strong>${r.profit.quotationPerTon.toLocaleString()}</strong></td>
-          <td class="num ${r.profit.grossProfitPerTon >= 0 ? '' : 'text-danger'}" style="${r.profit.grossProfitPerTon < 0 ? 'color: var(--danger)' : ''}">
-            ${r.profit.grossProfitPerTon.toFixed(0)}
-          </td>
-          <td class="num ${r.profit.totalGrossProfit >= 0 ? '' : 'text-danger'}" style="${r.profit.totalGrossProfit < 0 ? 'color: var(--danger)' : ''}">
-            ${r.profit.totalGrossProfit.toFixed(0)}
-          </td>
-          <td><span class="badge ${profitClass}">${profitText}</span></td>
-          <td class="action-cell">
-            <button class="btn btn-sm" onclick="App.showDetail(${idx})">详情</button>
-          </td>
-        </tr>
-      `;
-    }).join('');
   },
 
   showDetail(idx) {
-    const r = this.results[idx];
-    const modal = document.getElementById('detailModal');
+    const pr = this.processResults[idx];
+    if (!pr) return;
+    const c = pr.cost;
+    const item = pr.item;
+    const rm = pr.rawMaterial;
+
     const content = document.getElementById('detailContent');
+    const shapeIcon = item.isCircular ? ' <span class="badge badge-blue">圆</span>' : '';
+    const dimText = item.isCircular ? `Ф${item.width}mm` : `${item.width}×${item.length}mm`;
 
     content.innerHTML = `
       <div class="detail-section">
         <div class="detail-title">基本信息</div>
         <table class="data-table">
-          <tr><td>牌号</td><td>${r.input.grade}</td></tr>
-          <tr><td>形状</td><td>${r.input.isCircular ? '圆形板' : '矩形板'}</td></tr>
-          <tr><td>复层材料</td><td>${r.input.claddingMaterial}</td></tr>
-          <tr><td>基层材料</td><td>${r.input.baseMaterial}</td></tr>
-          <tr><td>总厚度</td><td>${r.input.totalThickness} mm</td></tr>
-          <tr><td>复层厚度 / 采购厚度</td><td>${r.input.claddingThickness} / ${r.input.purchaseCladdingThickness} mm</td></tr>
-          <tr><td>基层厚度 / 采购厚度</td><td>${r.input.baseThickness} / ${r.input.purchaseBaseThickness} mm</td></tr>
-          <tr><td>${r.input.isCircular ? '直径' : '宽度 × 长度'}</td><td>${r.input.isCircular ? 'Ф' + r.input.width + ' mm' : r.input.width + ' × ' + r.input.length + ' mm'}</td></tr>
-          <tr><td>张数</td><td>${r.input.sheets} 张</td></tr>
+          <tr><td>牌号</td><td><strong>${item.grade}</strong>${shapeIcon}</td></tr>
+          <tr><td>复层/基层厚度</td><td>${item.claddingThickness} / ${item.baseThickness} mm</td></tr>
+          <tr><td>尺寸</td><td>${dimText}</td></tr>
+          <tr><td>张数</td><td>${item.sheets} 张</td></tr>
+          <tr><td>复层密度 / 基板密度</td><td>${c.baseData.claddingDensity} / ${c.baseData.baseDensity} g/cm³</td></tr>
         </table>
       </div>
-
       <div class="detail-section">
-        <div class="detail-title">尺寸参数</div>
+        <div class="detail-title">原材料规格（第一页自动填入）</div>
         <table class="data-table">
-          <tr><td>放量标准</td><td>${r.dimensions.marginSource || '-'}</td></tr>
-          <tr><td>放量条件</td><td>${r.dimensions.conditionDesc || '-'}</td></tr>
-          <tr><td>厚度公差</td><td>${r.dimensions.thicknessTolerance || '-'}</td></tr>
-          <tr><td>基层加宽 / 覆层加宽</td><td>${r.dimensions.baseWidening} / ${r.dimensions.claddingWidening} mm</td></tr>
-          <tr><td>基层加长 / 覆层加长</td><td>${r.dimensions.baseLengthening} / ${r.dimensions.claddingLengthening} mm</td></tr>
-          ${r.dimensions.asmeExtra > 0 ? `<tr><td>ASME加厚</td><td>+${r.dimensions.asmeExtra} mm</td></tr>` : ''}
-          <tr><td>基层采购宽度 x 长度</td><td>${r.dimensions.basePurchaseWidth} x ${r.dimensions.basePurchaseLength} mm</td></tr>
-          <tr><td>覆层采购宽度 x 长度</td><td>${r.dimensions.claddingPurchaseWidth} x ${r.dimensions.claddingPurchaseLength} mm</td></tr>
+          <tr><td>基层采购 宽×长</td><td>${c.purchaseDims.J} × ${c.purchaseDims.L} mm</td></tr>
+          <tr><td>复层采购 宽×长</td><td>${c.purchaseDims.K} × ${c.purchaseDims.M} mm</td></tr>
+          <tr><td>采购复层厚 / 采购基层厚</td><td>${c.purchaseDims.E} / ${c.purchaseDims.G} mm</td></tr>
         </table>
       </div>
-
       <div class="detail-section">
-        <div class="detail-title">面积与重量</div>
+        <div class="detail-title">基础数据</div>
         <table class="data-table">
-          <tr><td>单板爆炸面积</td><td>${r.area.explosionAreaPerSheet.toFixed(3)} ㎡ ${r.input.isCircular ? '(矩形采购面)' : ''}</td></tr>
-          <tr><td>单板成品面积</td><td>${r.area.finishedAreaPerSheet.toFixed(3)} ㎡ ${r.input.isCircular ? '(π·r²)' : ''}</td></tr>
-          <tr><td>成品总面积</td><td>${r.area.totalFinishedArea.toFixed(3)} ㎡</td></tr>
-          <tr><td>采购基层单重</td><td>${r.weight.purchaseBaseWeight.toFixed(3)} 吨</td></tr>
-          <tr><td>采购复层单重</td><td>${r.weight.purchaseCladdingWeight.toFixed(3)} 吨</td></tr>
-          <tr><td>成品单重</td><td>${r.weight.finishedUnitWeight.toFixed(3)} 吨</td></tr>
-          <tr><td>成品总重</td><td>${r.weight.finishedTotalWeight.toFixed(3)} 吨</td></tr>
+          <tr><td>成品单重 / 总重</td><td>${c.finished.Q_unit.toFixed(3)} / ${c.finished.R_total.toFixed(3)} 吨</td></tr>
+          <tr><td>成品面积 AE</td><td>${c.baseData.AE.toFixed(2)} ㎡</td></tr>
+          <tr><td>覆层面积 AC</td><td>${c.baseData.AC.toFixed(2)} ㎡</td></tr>
+          <tr><td>基层面积 AD</td><td>${c.baseData.AD.toFixed(2)} ㎡</td></tr>
+          <tr><td>投料重量 AG</td><td>${c.baseData.AG.toFixed(3)} 吨</td></tr>
+          <tr><td>成品重量 AF</td><td>${c.baseData.AF.toFixed(3)} 吨</td></tr>
+          <tr><td>废钢重量</td><td>${c.scrapWeight.toFixed(3)} 吨</td></tr>
         </table>
       </div>
-
       <div class="detail-section">
-        <div class="detail-title">成本分析</div>
+        <div class="detail-title">成本汇总</div>
         <table class="data-table">
-          <tr><td>复层密度</td><td>${r.material.claddingDensity} g/cm³</td></tr>
-          <tr><td>爆炸单价</td><td>${r.material.explosionPrice} 元/㎡</td></tr>
-          <tr><td>碳钢单价</td><td>${r.input.carbonSteelPrice.toLocaleString()} 元/吨</td></tr>
-          <tr><td>不锈钢单价</td><td>${r.input.stainlessSteelPrice.toLocaleString()} 元/吨</td></tr>
-          <tr><td>单板材料成本</td><td>${r.cost.materialCostPerSheet.toFixed(2)} 元</td></tr>
-          <tr><td>吨钢材料成本</td><td>${r.cost.materialCostPerTon.toFixed(2)} 元/吨</td></tr>
-          <tr><td>爆炸吨钢成本</td><td>${r.cost.explosionCostPerTon.toFixed(2)} 元/吨</td></tr>
-          <tr><td>前后道加工成本</td><td>${r.cost.processingCostPerTon.toFixed(0)} 元/吨</td></tr>
-          <tr><td>合格率</td><td>${(r.cost.passRate * 100).toFixed(0)}%</td></tr>
-          <tr><td><strong>吨钢总成本</strong></td><td><strong>${r.cost.totalCostPerTon.toFixed(2)} 元/吨</strong></td></tr>
+          <tr><td>生产成本(不含税)不含固定 BH</td><td>${c.cost.BH.toFixed(2)} 元</td></tr>
+          <tr><td>原材料成本(不含税) BK</td><td>${c.cost.BK.toFixed(2)} 元</td></tr>
+          <tr><td>废钢(不含税) BL</td><td>${c.cost.BL.toFixed(2)} 元</td></tr>
+          <tr><td><strong>总成本(不含税) BM</strong></td><td><strong>${c.cost.BM.toFixed(2)} 元</strong></td></tr>
+          <tr><td>加工成本/吨 不含固定 BN</td><td>${c.cost.BN.toFixed(2)} 元/吨</td></tr>
+          <tr><td>吨成本 不含固定 BP</td><td>${c.cost.BP.toFixed(2)} 元/吨</td></tr>
+          <tr><td>加工成本含固定/吨 BT</td><td>${c.cost.BT.toFixed(2)} 元/吨</td></tr>
         </table>
       </div>
-
-      <div class="detail-section">
-        <div class="detail-title">成材率</div>
-        <table class="data-table">
-          <tr><td>基层成材率</td><td>${(r.yield.baseYield * 100).toFixed(1)}%</td></tr>
-          <tr><td>复层成材率</td><td>${(r.yield.claddingYield * 100).toFixed(1)}%</td></tr>
-          <tr><td>合计成材率</td><td>${(r.yield.totalYield * 100).toFixed(1)}%</td></tr>
-        </table>
-      </div>
-
       <div class="detail-section">
         <div class="detail-title">报价与毛利</div>
         <table class="data-table">
-          <tr><td>吨钢报价</td><td>${r.profit.quotationPerTon.toLocaleString()} 元/吨</td></tr>
-          <tr><td>不含税报价</td><td>${(r.profit.quotationPerTon / 1.13).toFixed(0)} 元/吨</td></tr>
-          <tr><td>单位面积报价</td><td>${r.profit.quotationPerSqm.toFixed(2)} 元/㎡</td></tr>
-          <tr><td>毛利(吨钢)</td><td style="color: ${r.profit.grossProfitPerTon >= 0 ? 'var(--success)' : 'var(--danger)'}; font-weight: 700">
-            ${r.profit.grossProfitPerTon.toFixed(2)} 元/吨
-          </td></tr>
-          <tr><td>毛利小计</td><td style="color: ${r.profit.totalGrossProfit >= 0 ? 'var(--success)' : 'var(--danger)'}; font-weight: 700">
-            ${r.profit.totalGrossProfit.toFixed(2)} 元
-          </td></tr>
-          <tr><td>来料加工吨钢价格</td><td>${r.profit.processingPricePerTon.toFixed(2)} 元/吨</td></tr>
-          <tr><td>来料加工报价</td><td>${r.profit.processingPricePerSqm.toFixed(2)} 元/㎡</td></tr>
+          <tr><td>单价(含税)</td><td>${c.pricing.hasPrice ? c.pricing.S.toFixed(2) + ' 元/吨' : '<span class="text-danger">未填入</span>'}</td></tr>
+          <tr><td>总金额(含税)</td><td>${c.pricing.hasPrice ? c.pricing.T.toFixed(2) + ' 元' : '<span class="text-danger">未填入</span>'}</td></tr>
+          <tr><td>毛利(不含税)不含固定 BU</td><td style="color:${c.pricing.BU>=0?'var(--success)':'var(--danger)'}">${c.pricing.BU.toFixed(2)} 元/吨</td></tr>
+          <tr><td>毛利(不含税)含固定 BV</td><td style="color:${c.pricing.BV>=0?'var(--success)':'var(--danger)'}">${c.pricing.BV.toFixed(2)} 元/吨</td></tr>
+          <tr><td><strong>毛利金额 U</strong></td><td style="color:${c.pricing.U>=0?'var(--success)':'var(--danger)'};font-weight:700">${c.pricing.U.toFixed(2)} 元</td></tr>
         </table>
       </div>
     `;
 
-    modal.classList.remove('hidden');
+    document.getElementById('detailModal').classList.remove('hidden');
   },
 
   closeDetail() {
     document.getElementById('detailModal').classList.add('hidden');
+  },
+
+  // ========== 第二页：价格表与工序成本 ==========
+
+  renderExplosionPriceTable() {
+    const container = document.getElementById('explosionPriceTable');
+    if (!container) return;
+
+    const table = CostCalculator.EXPLOSION_PRICE_TABLE;
+    const thicknesses = Object.keys(table).map(Number).sort((a, b) => a - b);
+    const categories = [
+      { key: 'austenitic', name: '奥氏体不锈钢' },
+      { key: 'duplex', name: '双相不锈钢' },
+      { key: 'titanium', name: '钛及钛合金' },
+      { key: 'nickel', name: '镍基合金&铜合金' },
+    ];
+
+    let html = '<table class="data-table explosion-table"><thead><tr><th>复层厚度 (mm)</th>';
+    categories.forEach(c => html += `<th>${c.name}</th>`);
+    html += '</tr></thead><tbody>';
+    thicknesses.forEach(t => {
+      html += `<tr><td class="num"><strong>${t}</strong></td>`;
+      categories.forEach(c => {
+        const val = table[t][c.key];
+        html += `<td class="num">${val}</td>`;
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    html += '<div class="text-sm text-secondary" style="margin-top:8px;">爆炸单价默认根据复层厚度和材料类型从此表查取（支持线性插值），也可在上方手动指定。</div>';
+    container.innerHTML = html;
+  },
+
+  renderProcessPriceTable() {
+    const container = document.getElementById('processPriceTable');
+    if (!container) return;
+
+    const fees = CostCalculator.PROCESSING_FEES;
+    const keys = Object.keys(fees);
+
+    let html = '<table class="data-table process-price-table"><thead><tr><th>工序</th><th>单价</th><th>单位</th></tr></thead><tbody>';
+    keys.forEach(key => {
+      const f = fees[key];
+      const customVal = this.processPrices[key];
+      const val = customVal ?? f.price;
+      html += `<tr>
+        <td>${f.name}</td>
+        <td class="num">
+          <input type="number" class="inline-input process-price-input" data-key="${key}" value="${val}" step="0.1" min="0" style="width:80px;" onchange="App.updateProcessPrice('${key}', this.value)">
+        </td>
+        <td>${f.unit}</td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    container.innerHTML = html;
+  },
+
+  updateProcessPrice(key, value) {
+    const v = parseFloat(value);
+    if (!isNaN(v) && v >= 0) {
+      this.processPrices[key] = v;
+    } else {
+      delete this.processPrices[key];
+    }
+    this.renderProcessCost();
+  },
+
+  renderProcessCost() {
+    const card = document.getElementById('processCostCard');
+    const container = document.getElementById('processCostDetail');
+
+    if (this.parsedItems.length === 0) {
+      card.style.display = 'none';
+      container.innerHTML = '';
+      document.getElementById('resultSection').classList.add('hidden');
+      return;
+    }
+
+    card.style.display = '';
+
+    // 同步价格参数
+    ['carbonSteelPrice', 'stainlessSteelPrice'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) this.priceConfig[id] = parseFloat(el.value) || 0;
+    });
+    const explosionEl = document.getElementById('explosionPrice');
+    if (explosionEl) {
+      const val = explosionEl.value.trim();
+      this.priceConfig.explosionPrice = val ? parseFloat(val) : null;
+    }
+
+    // 为每条订单计算工序成本
+    this.processResults = this.parsedItems.map((item, idx) => {
+      const rawMaterial = CostCalculator.designRawMaterial({
+        ...item, options: this.designOptions,
+      });
+      const layoutPlan = CostCalculator.designLayoutPlan({
+        ...item, options: this.designOptions,
+      });
+      const orderPrice = this.orderPrices[idx] || {};
+      const cost = CostCalculator.calculateProcessCost(
+        item, rawMaterial, layoutPlan, this.priceConfig, this.processPrices,
+        {
+          sellingPricePerTon: orderPrice.sellingPricePerTon || 0,
+          totalAmount: orderPrice.totalAmount || 0,
+          fixedCosts: this.fixedCosts,
+        }
+      );
+      return { item, rawMaterial, layoutPlan, cost };
+    });
+
+    container.innerHTML = this.processResults.map((pr, idx) => {
+      const c = pr.cost;
+      const item = pr.item;
+      const shapeIcon = item.isCircular ? ' <span class="badge badge-blue">圆</span>' : '';
+      const dimText = item.isCircular
+        ? `Ф${item.width}mm`
+        : `${item.width}×${item.length}mm`;
+      const pd = c.purchaseDims;
+      const bd = c.baseData;
+      const fin = c.finished;
+      const pricing = c.pricing;
+
+      // 工序明细行
+      let processRows = c.processes.map(p => `
+        <tr>
+          <td>${p.name}</td>
+          <td class="num">${p.price.toFixed(1)}</td>
+          <td>${p.unit}</td>
+          <td class="num">${p.qty.toFixed(2)}</td>
+          <td class="num">${p.cost.toFixed(2)}</td>
+          <td class="text-secondary text-sm">${p.qtyDesc}</td>
+        </tr>
+      `).join('');
+
+      // 报价输入
+      const orderPrice = this.orderPrices[idx] || {};
+      const priceInputHtml = `
+        <div class="pc-price-input">
+          <div class="form-group" style="margin:0;">
+            <label class="text-sm">报价(含税) 元/吨</label>
+            <input type="number" class="inline-input" value="${orderPrice.sellingPricePerTon || ''}" step="10" min="0"
+              placeholder="手动填入" style="width:120px;"
+              onchange="App.updateOrderPrice(${idx}, 'sellingPricePerTon', this.value)">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label class="text-sm">总金额(含税) 元</label>
+            <input type="number" class="inline-input" value="${orderPrice.totalAmount || ''}" step="100" min="0"
+              placeholder="手动填入" style="width:140px;"
+              onchange="App.updateOrderPrice(${idx}, 'totalAmount', this.value)">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label class="text-sm">成品总重</label>
+            <div class="text-sm" style="padding:6px 0;">${fin.R_total.toFixed(3)} 吨</div>
+          </div>
+        </div>
+      `;
+
+      const profitColor = pricing.BV >= 0 ? 'var(--success)' : 'var(--danger)';
+      const noPriceHtml = pricing.hasPrice ? '' : '<div class="alert alert-warning" style="margin:8px 0;padding:6px 12px;font-size:12px;">⚠ 尚未填入报价，毛利无法计算</div>';
+
+      return `
+        <div class="pc-item">
+          <div class="pc-header">
+            <span class="pc-index">${idx + 1}</span>
+            <span class="pc-grade"><strong>${item.grade}</strong>${shapeIcon}</span>
+            <span class="text-sm text-secondary">${dimText} | ${item.claddingThickness}+${item.baseThickness}mm | ${item.sheets}张</span>
+            <span class="badge badge-blue">爆炸${c.explosionPrice}元/㎡</span>
+          </div>
+
+          <!-- 原材料规格（第一页自动填入） -->
+          <div class="pc-specs">
+            <span class="text-sm text-secondary">原材料规格(自动填入):</span>
+            <span class="badge badge-green">基层 ${pd.J}×${pd.L}mm</span>
+            <span class="badge badge-green">复层 ${pd.K}×${pd.M}mm</span>
+            <span class="badge badge-green">采购厚 ${pd.E}+${pd.G}mm</span>
+            <span class="text-sm text-secondary">| 密度: 复${bd.claddingDensity} 基${bd.baseDensity}</span>
+          </div>
+
+          <!-- 基础数据 -->
+          <div class="pc-basedata">
+            <table class="rm-table" style="font-size:11px;">
+              <tr><td>成品单重</td><td>${fin.Q_unit.toFixed(3)}吨</td>
+                  <td>成品总重</td><td><strong>${fin.R_total.toFixed(3)}吨</strong></td>
+                  <td>成品面积</td><td>${bd.AE.toFixed(2)}㎡</td></tr>
+              <tr><td>覆层面积</td><td>${bd.AC.toFixed(2)}㎡</td>
+                  <td>基层面积</td><td>${bd.AD.toFixed(2)}㎡</td>
+                  <td>投料重量</td><td>${bd.AG.toFixed(3)}吨</td></tr>
+              <tr><td>成品重量</td><td>${bd.AF.toFixed(3)}吨</td>
+                  <td>废钢</td><td>${c.scrapWeight.toFixed(3)}吨</td>
+                  <td>投料/㎡</td><td>${bd.AB.toFixed(4)}吨/㎡</td></tr>
+            </table>
+          </div>
+
+          <!-- 工序明细表 -->
+          <div style="overflow-x:auto;">
+            <table class="data-table pc-table">
+              <thead>
+                <tr>
+                  <th>工序</th>
+                  <th>单价</th>
+                  <th>单位</th>
+                  <th>数量</th>
+                  <th>成本(元)</th>
+                  <th>计算说明</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${processRows}
+                <tr class="pc-subtotal">
+                  <td colspan="4"><strong>生产成本(不含税)不含固定 BH</strong></td>
+                  <td class="num"><strong>${c.cost.BH.toFixed(2)}</strong></td>
+                  <td class="text-secondary text-sm">∑工序/1.13</td>
+                </tr>
+                <tr class="pc-subtotal">
+                  <td colspan="4">原材料成本(不含税) BK</td>
+                  <td class="num">${c.cost.BK.toFixed(2)}</td>
+                  <td class="text-secondary text-sm">碳钢${this.priceConfig.carbonSteelPrice||'未填'} + 不锈钢${this.priceConfig.stainlessSteelPrice||'未填'} + 废钢${c.cost.BL.toFixed(0)}</td>
+                </tr>
+                <tr class="pc-total">
+                  <td colspan="4"><strong>总成本(不含税) BM</strong></td>
+                  <td class="num"><strong>${c.cost.BM.toFixed(2)}</strong></td>
+                  <td></td>
+                </tr>
+                <tr class="pc-subtotal">
+                  <td colspan="4">吨成本(不含固定) BP</td>
+                  <td class="num">${c.cost.BP.toFixed(0)} 元/吨</td>
+                  <td class="text-secondary text-sm">加工${c.cost.BN.toFixed(0)} + 材料${(fin.R_total>0?(c.cost.BK/fin.R_total):0).toFixed(0)}</td>
+                </tr>
+                <tr class="pc-subtotal">
+                  <td colspan="4">加工成本含固定/吨 BT</td>
+                  <td class="num">${c.cost.BT.toFixed(0)} 元/吨</td>
+                  <td class="text-secondary text-sm">+人工${this.fixedCosts.labor}+折旧${this.fixedCosts.depreciation}+电费${this.fixedCosts.electricity}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- 报价与毛利 -->
+          ${priceInputHtml}
+          ${noPriceHtml}
+          ${pricing.hasPrice ? `
+            <div class="pc-profit-result">
+              <table class="rm-table" style="font-size:12px;">
+                <tr>
+                  <td>单价(含税)</td><td><strong>${pricing.S.toFixed(2)} 元/吨</strong></td>
+                  <td>总金额(含税)</td><td><strong>${pricing.T.toFixed(2)} 元</strong></td>
+                  <td>不含税单价</td><td>${(pricing.S/1.13).toFixed(0)} 元/吨</td>
+                </tr>
+                <tr>
+                  <td>毛利(不含税)不含固定</td>
+                  <td style="color:${pricing.BU>=0?'var(--success)':'var(--danger)'}">${pricing.BU.toFixed(0)} 元/吨</td>
+                  <td>毛利(不含税)含固定</td>
+                  <td style="color:${profitColor};font-weight:700">${pricing.BV.toFixed(0)} 元/吨</td>
+                  <td><strong>毛利金额</strong></td>
+                  <td style="color:${profitColor};font-weight:700;font-size:14px;">${pricing.U.toFixed(0)} 元</td>
+                </tr>
+              </table>
+            </div>
+          ` : ''}
+
+          <div style="margin-top:8px;">
+            <button class="btn btn-sm" onclick="App.showDetail(${idx})">查看详情</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // 汇总统计
+    this.renderResults();
+  },
+
+  updateOrderPrice(idx, field, value) {
+    if (!this.orderPrices[idx]) this.orderPrices[idx] = {};
+    const v = parseFloat(value);
+    if (!isNaN(v) && v > 0) {
+      this.orderPrices[idx][field] = v;
+      // 填了一个清另一个（互斥输入）
+      if (field === 'sellingPricePerTon') {
+        delete this.orderPrices[idx].totalAmount;
+      } else if (field === 'totalAmount') {
+        delete this.orderPrices[idx].sellingPricePerTon;
+      }
+    } else {
+      delete this.orderPrices[idx][field];
+    }
+    this.renderProcessCost();
   },
 };
 

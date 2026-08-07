@@ -55,6 +55,15 @@
 
   <main class="app-main">
 
+    <!-- Tab 导航 -->
+    <div class="tab-nav">
+      <button class="tab-btn active" data-tab="tab1" id="tab1Btn">原材料设计</button>
+      <button class="tab-btn" data-tab="tab2" id="tab2Btn">成本核算</button>
+    </div>
+
+    <!-- ===== Tab 1: 原材料设计 ===== -->
+    <div class="tab-content active" id="tab1">
+
     <!-- 上传区域 -->
     <div class="card mb-24">
       <div class="card-header">
@@ -97,16 +106,22 @@
             <input type="number" id="manualBase" placeholder="如 9" step="0.1">
           </div>
           <div class="form-group">
-            <label>宽度 (mm)</label>
+            <label id="manualWidthLabel">宽度 (mm)</label>
             <input type="number" id="manualWidth" placeholder="如 1600">
           </div>
-          <div class="form-group">
-            <label>长度 (mm)</label>
+          <div class="form-group" id="manualLengthGroup">
+            <label id="manualLengthLabel">长度 (mm)</label>
             <input type="number" id="manualLength" placeholder="如 6000">
           </div>
           <div class="form-group">
             <label>张数</label>
             <input type="number" id="manualSheets" placeholder="1" value="1" min="1">
+          </div>
+          <div class="form-group">
+            <label>&nbsp;</label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="manualCircular"> 圆形板
+            </label>
           </div>
         </div>
         <button class="btn btn-primary btn-sm" id="addManualBtn">+ 添加规格</button>
@@ -118,10 +133,13 @@
     <div class="card mb-24" id="rawMaterialCard" style="display:none;">
       <div class="card-header">
         <h2>原材料尺寸设计</h2>
-        <span class="text-sm text-secondary">根据 NB/T 47002.1-2019 标准自动推导采购原材料尺寸</span>
+        <span class="text-sm text-secondary">根据基层/复层厚度自动推导采购原材料尺寸</span>
       </div>
       <div class="card-body">
         <div class="rm-options">
+          <label class="checkbox-label">
+            <input type="checkbox" id="keyOrderCheckbox"> 重点订单 (薄板基层+40)
+          </label>
           <label class="checkbox-label">
             <input type="checkbox" id="samplingCheckbox"> 取样 (+150mm)
           </label>
@@ -130,7 +148,7 @@
           </label>
         </div>
         <div class="alert alert-info">
-          系统根据成品尺寸、复层厚度和材料类型，按 NB/T 47002.1-2019 标准自动查表确定基层/覆层放量。不锈钢常见可采购宽度: 1219/1500/1800/2000/2500mm，最长8000mm。厚度可自动按标准生成，也可在下方手动输入覆盖。
+          放量规则：基层&lt;60mm时基层+30（重点订单+40），复层=基层+60；基层≥60mm时基层+60，复层=基层+60。取样额外+150mm，ASME基层+1mm。不锈钢常见可采购宽度: 1219/1500/1800/2000/2500mm，最长8000mm。
         </div>
         <div id="rawMaterialDesign"></div>
       </div>
@@ -150,41 +168,103 @@
       </div>
     </div>
 
-    <!-- 价格参数设置 -->
+    </div><!-- /tab1 -->
+
+    <!-- ===== Tab 2: 成本核算 ===== -->
+    <div class="tab-content" id="tab2">
+
+    <!-- 原材料价格 -->
     <div class="card mb-24">
       <div class="card-header">
-        <h2>价格参数设置</h2>
+        <h2>原材料价格</h2>
+        <span class="text-sm text-secondary">请手动填入实际采购价格（含税）</span>
       </div>
       <div class="card-body">
         <div class="price-config">
           <div class="form-group">
             <label>碳钢单价 (含税 元/吨)</label>
-            <input type="number" id="carbonSteelPrice" value="4900" step="10">
+            <input type="number" id="carbonSteelPrice" value="" step="10" placeholder="手动填入">
           </div>
           <div class="form-group">
             <label>不锈钢单价 (含税 元/吨)</label>
-            <input type="number" id="stainlessSteelPrice" value="28300" step="100">
+            <input type="number" id="stainlessSteelPrice" value="" step="100" placeholder="手动填入">
           </div>
-          <div class="form-group">
-            <label>吨钢报价 (含税 元/吨)</label>
-            <input type="number" id="quotationPerTon" value="14580" step="10">
-          </div>
+        </div>
+        <div class="alert alert-info">
+          原材料价格需手动填入实际采购价。毛利计算还需要在下方每条订单中填入报价（单价或总金额）。
+        </div>
+      </div>
+    </div>
+
+    <!-- 爆炸价格 -->
+    <div class="card mb-24">
+      <div class="card-header">
+        <h2>爆炸价格</h2>
+        <span class="text-sm text-secondary">按复层厚度和材料类型查表（元/㎡），可手动覆盖</span>
+      </div>
+      <div class="card-body">
+        <div class="price-config" style="margin-bottom:16px;">
           <div class="form-group">
             <label>爆炸单价 (元/㎡) <span class="text-sm text-secondary">留空=自动查表</span></label>
             <input type="number" id="explosionPrice" value="" step="10" placeholder="自动">
           </div>
         </div>
-        <div class="alert alert-info">
-          爆炸单价默认根据复层厚度和材料类型自动查表获取，也可手动指定。密度根据材料牌号自动匹配。
-        </div>
-        <button class="btn btn-primary" id="calcBtn">计算成本</button>
+        <div id="explosionPriceTable"></div>
       </div>
     </div>
 
-    <!-- 计算结果 -->
+    <!-- 工序加工单价 -->
+    <div class="card mb-24">
+      <div class="card-header">
+        <h2>工序加工单价</h2>
+        <span class="text-sm text-secondary">可修改，默认取自费用标准</span>
+      </div>
+      <div class="card-body">
+        <div id="processPriceTable"></div>
+      </div>
+    </div>
+
+    <!-- 固定费用 -->
+    <div class="card mb-24">
+      <div class="card-header">
+        <h2>固定费用</h2>
+        <span class="text-sm text-secondary">元/吨，计入含固定费用毛利</span>
+      </div>
+      <div class="card-body">
+        <div class="price-config">
+          <div class="form-group">
+            <label>人工 (元/吨)</label>
+            <input type="number" id="fixedLabor" value="970" step="10">
+          </div>
+          <div class="form-group">
+            <label>折旧 (元/吨)</label>
+            <input type="number" id="fixedDepreciation" value="700" step="10">
+          </div>
+          <div class="form-group">
+            <label>电费 (元/吨)</label>
+            <input type="number" id="fixedElectricity" value="338" step="10">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 工序成本明细 -->
+    <div class="card mb-24" id="processCostCard" style="display:none;">
+      <div class="card-header">
+        <h2>工序成本明细</h2>
+        <span class="text-sm text-secondary">原材料规格自动从第一页填入，报价需手动填入</span>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-info">
+          原材料规格（基层/复层采购宽长）已自动从第一页填入。每条订单需手动填入报价（含税单价元/吨 或 含税总额元），填入后自动计算毛利。
+        </div>
+        <div id="processCostDetail"></div>
+      </div>
+    </div>
+
+    <!-- 汇总统计 -->
     <div id="resultSection" class="hidden">
 
-      <!-- 汇总统计 -->
       <div class="card mb-24">
         <div class="card-header">
           <h2>汇总统计</h2>
@@ -196,66 +276,28 @@
               <div class="stat-value" id="summarySheets">0</div>
             </div>
             <div class="stat-card">
-              <div class="stat-label">成品总面积</div>
-              <div class="stat-value" id="summaryArea">0<span class="stat-unit">㎡</span></div>
-            </div>
-            <div class="stat-card">
               <div class="stat-label">成品总重</div>
               <div class="stat-value" id="summaryWeight">0<span class="stat-unit">吨</span></div>
             </div>
             <div class="stat-card">
-              <div class="stat-label">总成本</div>
+              <div class="stat-label">总成本(不含税)</div>
               <div class="stat-value" id="summaryCost">0<span class="stat-unit">元</span></div>
             </div>
             <div class="stat-card">
-              <div class="stat-label">总收入(不含税)</div>
+              <div class="stat-label">总收入(含税)</div>
               <div class="stat-value" id="summaryRevenue">0<span class="stat-unit">元</span></div>
             </div>
             <div class="stat-card" id="summaryProfitCard">
-              <div class="stat-label">总毛利</div>
+              <div class="stat-label">总毛利(含固定)</div>
               <div class="stat-value" id="summaryProfit">0<span class="stat-unit">元</span></div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- 明细表格 -->
-      <div class="card">
-        <div class="card-header">
-          <h2>成本核算明细</h2>
-        </div>
-        <div style="overflow-x: auto;">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>序号</th>
-                <th>牌号</th>
-                <th>复层厚</th>
-                <th>基层厚</th>
-                <th>宽度</th>
-                <th>长度</th>
-                <th>张数</th>
-                <th>单重(吨)</th>
-                <th>总重(吨)</th>
-                <th>总面积(㎡)</th>
-                <th>爆炸单价</th>
-                <th>材料成本(元/吨)</th>
-                <th>爆炸成本(元/吨)</th>
-                <th>总成本(元/吨)</th>
-                <th>报价(元/吨)</th>
-                <th>毛利(元/吨)</th>
-                <th>毛利小计(元)</th>
-                <th>状态</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody id="resultTableBody">
-            </tbody>
-          </table>
-        </div>
-      </div>
-
     </div>
+
+    </div><!-- /tab2 -->
 
   </main>
 </div>

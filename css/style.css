@@ -909,3 +909,227 @@ body {
   max-width: 100%;
   height: auto;
 }
+
+/* ========== Tab 导航 ========== */
+
+.tab-nav {
+  display: flex;
+  gap: 0;
+  margin-bottom: 24px;
+  border-bottom: 2px solid var(--border);
+}
+
+.tab-btn {
+  padding: 12px 28px;
+  border: none;
+  background: transparent;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  transition: all 0.2s;
+}
+
+.tab-btn:hover {
+  color: var(--primary);
+}
+
+.tab-btn.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+/* ========== 爆炸价格表 ========== */
+
+.explosion-table {
+  font-size: 13px;
+}
+
+.explosion-table th {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.explosion-table td {
+  text-align: center;
+}
+
+/* ========== 工序单价表 ========== */
+
+.process-price-table {
+  font-size: 13px;
+}
+
+.process-price-table .inline-input {
+  text-align: right;
+}
+
+/* ========== 工序成本明细 ========== */
+
+.pc-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.pc-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #f0f7ff;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.pc-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.pc-grade {
+  font-size: 14px;
+}
+
+.pc-table {
+  font-size: 13px;
+  margin: 0;
+}
+
+.pc-table th {
+  background: #f8fafc;
+  white-space: nowrap;
+}
+
+.pc-table td {
+  padding: 6px 12px;
+}
+
+.pc-subtotal {
+  background: #f8fafc;
+}
+
+.pc-subtotal td {
+  border-top: 1px dashed var(--border);
+}
+
+.pc-total {
+  background: #f0f7ff;
+  font-weight: 600;
+}
+
+.pc-total td {
+  border-top: 1px solid var(--border);
+}
+
+.pc-profit td {
+  border-top: 2px solid var(--border);
+}
+
+.pc-profit.profit {
+  background: #f0fdf4;
+  color: #16a34a;
+}
+
+.pc-profit.loss {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.pc-profit .num {
+  font-size: 16px;
+}
+
+/* ========== 新增：报价输入与规格展示 ========== */
+
+.pc-specs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+  padding: 8px 12px;
+  background: var(--bg-secondary, #f8fafc);
+  border-radius: 6px;
+  border: 1px dashed var(--border, #e2e8f0);
+}
+
+.pc-basedata {
+  margin: 8px 0;
+  padding: 8px 12px;
+  background: var(--bg-secondary, #f8fafc);
+  border-radius: 6px;
+}
+
+.pc-basedata table {
+  width: 100%;
+}
+
+.pc-price-input {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  margin: 12px 0;
+  padding: 12px 16px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+
+.pc-price-input .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pc-price-input input {
+  padding: 6px 10px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.pc-price-input input:focus {
+  border-color: var(--primary, #2563eb);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+}
+
+.pc-profit-result {
+  margin: 8px 0;
+  padding: 12px 16px;
+  background: var(--bg-secondary, #f8fafc);
+  border-radius: 8px;
+  border: 1px solid var(--border, #e2e8f0);
+}
+
+.pc-profit-result table {
+  width: 100%;
+}
+
+.alert-warning {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  color: #92400e;
+}

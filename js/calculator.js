@@ -68,16 +68,18 @@ const EXPLOSION_PRICE_TABLE = {
 const PROCESSING_FEES = {
   // [单价, 单位]
   welding:     { name: '拼焊', price: 8,     unit: 'm'  },     // 拼焊
-  grinding:    { name: '打磨', price: 25,    unit: '㎡' },     // 打磨(成品)
+  grindingClad:  { name: '打磨-复板', price: 6,  unit: '㎡' },  // 打磨覆层
+  grindingBase:  { name: '打磨-基板', price: 16, unit: '㎡' },  // 打磨基层
+  grindingFinish:{ name: '打磨-成品', price: 24, unit: '㎡' },  // 打磨成品
   transport:   { name: '运输', price: 170,   unit: '吨' },     // 倒转运输
-  heatTreat:   { name: '热处理', price: 80,  unit: '吨' },     // 热处理
-  straighten:  { name: '校平', price: 7,     unit: '㎡' },     // 校平
+  heatTreat:   { name: '热处理', price: 20,  unit: '吨' },     // 热处理
+  straighten:  { name: '校平', price: 7,     unit: '吨' },     // 校平(实际按吨计)
   ut:          { name: 'UT',   price: 1.5,   unit: '㎡' },     // 超声波检测
   packaging:   { name: '包装', price: 5,     unit: '㎡' },     // 包装
   cutting:     { name: '切割', price: 2.5,   unit: 'm'  },     // 切割
   edgeMilling: { name: '铣边', price: 2.2,   unit: 'm'  },     // 铣边
   pt:          { name: 'PT',   price: 12,    unit: 'm'  },     // 渗透检测
-  repairWeld:  { name: '补焊', price: 30,    unit: '块' },     // 补焊
+  repairWeld:  { name: '补焊', price: 30,    unit: '吨' },     // 补焊(实际按吨计)
 };
 
 // 固定费用 (元/吨)
@@ -149,51 +151,33 @@ function getMarginsByStandard(grade, claddingThickness, baseThickness, width, le
     };
   }
 
-  // 不锈钢/双相钢: 按 NB/T 47002.1-2019 查表
-  // 确定复层厚度分组
-  let group;
-  if (claddingThickness <= 2) group = 1;
-  else if (claddingThickness <= 7) group = 2;
-  else group = 3;
+  // 不锈钢/双相钢: 新放量规则（按基层/复层厚度分组）
+  // 基层放量: 基层<60 → +30(正常)/+40(重点订单); 基层>=60 → +60
+  // 复层放量 = 基层放量 + 60
+  const isThick = baseThickness >= 60;
+  const isKeyOrder = options.keyOrder || false;
 
-  const groupDesc = group === 1 ? '复层≤2mm' : group === 2 ? '复层3~7mm' : '复层8~10mm';
-  const thickTol = group === 1 ? '≥-0.1mm' : group === 2 ? '≥-0.15mm' : '≥-0.3mm';
+  let baseWidening, claddingWidening;
+  let groupDesc, conditionDesc;
 
-  let baseWidening, baseLengthening;
-  let conditionDesc = '';
-
-  // 查表: 基层余量取决于成品宽度、成品长度
-  if (group === 1 || group === 2) {
-    if (width >= 2600) {
-      baseWidening = 50;
-      baseLengthening = Math.round(length * 0.01);
-      conditionDesc = `宽≥2600: 基层+50/+1%`;
-    } else if (length > 5000) {
-      baseWidening = 40;
-      baseLengthening = Math.round(length * 0.01);
-      conditionDesc = `宽≤2600, 长>5000: 基层+40/+1%`;
-    } else {
-      baseWidening = 40;
-      baseLengthening = 40;
-      conditionDesc = `宽≤2600, 长≤5000: 基层+40/+40`;
-    }
+  if (isThick) {
+    // 厚板: 基层>=60mm
+    baseWidening = 60;
+    claddingWidening = baseWidening + 60;  // 120
+    groupDesc = '厚板(基层≥60mm)';
+    conditionDesc = `基层≥60: 基层+${baseWidening}，复层=${baseWidening}+60=${claddingWidening}`;
   } else {
-    // group 3 (8~10mm)
-    if (width >= 2600 || length > 5000) {
-      baseWidening = 50;
-      baseLengthening = Math.round(length * 0.01);
-      conditionDesc = `宽≥2600或长>5000: 基层+50/+1%`;
-    } else {
-      baseWidening = 50;
-      baseLengthening = 50;
-      conditionDesc = `宽≤2600, 长≤5000: 基层+50/+50`;
-    }
+    // 薄板: 基层<60mm
+    baseWidening = isKeyOrder ? 40 : 30;
+    claddingWidening = baseWidening + 60;  // 90 或 100
+    groupDesc = isKeyOrder ? '薄板-重点订单(基层<60mm)' : '薄板(基层<60mm)';
+    conditionDesc = `基层<60: 基层+${baseWidening}，复层=${baseWidening}+60=${claddingWidening}`;
   }
 
-  // 覆层余量: 固定 +30/+30
-  let claddingWidening = 30;
-  let claddingLengthening = 30;
-  let notes = [`覆层+30/+30`, conditionDesc];
+  // 宽度和长度放量相同
+  let baseLengthening = baseWidening;
+  let claddingLengthening = claddingWidening;
+  let notes = [conditionDesc];
 
   // 取样: 额外+150mm
   if (options.sampling) {
@@ -214,10 +198,10 @@ function getMarginsByStandard(grade, claddingThickness, baseThickness, width, le
     claddingWidening,
     claddingLengthening,
     asmeExtra,
-    marginSource: `NB/T 47002.1-2019 ${groupDesc}`,
+    marginSource: groupDesc,
     conditionDesc: notes.join('，'),
-    thicknessTolerance: thickTol,
-    group,
+    thicknessTolerance: isThick ? '厚板标准' : '薄板标准',
+    group: isThick ? 3 : (isKeyOrder ? 2 : 1),
   };
 }
 
@@ -1210,6 +1194,278 @@ function generateStandardSVG(M, Q, K, O, H, I, isCircular) {
   return svg;
 }
 
+// ========== 工序成本计算 (按Excel毛利表逻辑) ==========
+
+/**
+ * 计算单条订单的工序成本明细
+ * 完全按照"爆炸毛利表-成本0804.xlsx"的毛利表sheet公式逻辑
+ * 原材料规格(J/K/L/M)从网页第一页自动填入
+ * 毛利需要手动填入单价(含税元/吨)或总金额(含税元)才能计算
+ *
+ * @param {Object} item - 订单参数
+ * @param {Object} rawMaterial - designRawMaterial 返回结果
+ * @param {Object} layoutPlan - designLayoutPlan 返回结果（用于获取拼焊信息）
+ * @param {Object} priceConfig - { carbonSteelPrice(W), stainlessSteelPrice(X), explosionPrice }
+ * @param {Object} processPrices - 工序单价覆盖
+ * @param {Object} options - { sellingPricePerTon(S), totalAmount(T), fixedCosts: {labor, depreciation, electricity} }
+ * @returns {Object} 工序成本明细（包含Excel所有列）
+ */
+function calculateProcessCost(item, rawMaterial, layoutPlan, priceConfig, processPrices = {}, options = {}) {
+  const { grade, sheets: P, isCircular } = item;
+  const rm = rawMaterial;
+
+  // ===== 从第一页获取采购尺寸 (J/K/L/M) =====
+  const J = rm.rawMaterial.basePurchaseWidth;       // 基层采购宽度
+  const L = rm.rawMaterial.basePurchaseLength;       // 基层采购长度
+  const K = rm.rawMaterial.claddingPurchaseWidth;    // 复层采购宽度
+  const M = rm.rawMaterial.claddingPurchaseLength;   // 复层采购长度
+  const H = rm.input.width;                          // 成品宽度
+  const I = rm.input.length;                         // 成品长度
+
+  // ===== 基础参数 =====
+  const D = rm.input.claddingThickness;              // 复层厚度
+  const F = rm.input.baseThickness;                  // 基层厚度
+  const E = rm.input.purchaseCladdingThickness || D; // 采购复层厚度
+  const G = rm.input.purchaseBaseThickness || F;     // 采购基层厚度
+  const N = rm.material.claddingDensity;             // 复层密度
+  const O = rm.material.baseDensity;                 // 基板密度
+  const W_price = priceConfig.carbonSteelPrice || 0; // 碳钢单价(含税) W
+  const X_price = priceConfig.stainlessSteelPrice || 0; // 不锈钢单价(含税) X
+
+  // ===== 成品重量 Q (吨) =====
+  const Q_unit = Math.round(D * H * I * N / 1e9 * 1000) / 1000
+               + Math.round(O * F * H * I / 1e9 * 1000) / 1000;
+  const R_total = Q_unit * P;  // 成品总重(吨) R
+
+  // ===== 计算用基础数据 =====
+  // AE: 成品面积 = H * I * P / 1e6 (m²)
+  const AE = (isCircular ? Math.PI * (H/2) * (H/2) : H * I) * P / 1e6;
+
+  // AF: 成品重量(吨) = (D*H*I*N/1e6 + F*H*I*O/1e6) * P / 1000
+  const finishedArea_mm2 = isCircular ? Math.PI * (H/2) * (H/2) : H * I;
+  const AF = (D * finishedArea_mm2 * N / 1e6 + F * finishedArea_mm2 * O / 1e6) * P / 1000;
+
+  // AG: 投料重量(吨) = (E*N*K*L + J*L*O*G) / 1e6 * P / 1000
+  // 注意：Excel公式中复层重量用K*L(复层采购宽×基层采购长)，基层用J*L
+  const AG = (E * N * K * L / 1e6 + J * L * O * G / 1e6) * P / 1000;
+
+  // AC: 覆层面积 = K * M / 1e6 * P (m²)
+  const AC = K * M / 1e6 * P;
+
+  // AD: 基层面积 = J * L / 1e6 * P (m²)
+  const AD = J * L / 1e6 * P;
+
+  // AB: 投料重量/㎡ = (E*N + G*O) / 1000 (吨/m²)
+  const AB = (E * N + G * O) / 1000;
+
+  // AA: 成品重量/㎡ = AF / AE
+  const AA = AE > 0 ? AF / AE : 0;
+
+  // ===== 爆炸单价 (查表) =====
+  const explosionPrice = priceConfig.explosionPrice || getExplosionPrice(D, grade);
+
+  // ===== 合并工序单价 =====
+  const pp = {};
+  for (const key in PROCESSING_FEES) {
+    pp[key] = processPrices[key] ?? PROCESSING_FEES[key].price;
+  }
+
+  // ===== 拼焊焊缝信息 =====
+  let weldLength_m = 0;
+  let hasWelding = false;
+  if (layoutPlan && layoutPlan.plans) {
+    const weldPlan = layoutPlan.plans.find(p => p.type === 'welding');
+    if (weldPlan && weldPlan.totalWeldLength) {
+      weldLength_m = weldPlan.totalWeldLength / 1000 * P;
+      hasWelding = true;
+    }
+  }
+
+  // ===== 各工序成本 (按Excel公式) =====
+  // AI: 拼焊成本 = AH(单价) * M(复层采购长) * 1.2 / 1000 * P
+  const AI = hasWelding
+    ? pp.welding * M * 1.2 / 1000 * P
+    : 0;
+
+  // AM: 打磨成本 = AJ(覆层单价)*AC + AK(基层单价)*AD + AL(成品单价)*AE
+  const AM = pp.grindingClad * AC + pp.grindingBase * AD + pp.grindingFinish * AE;
+
+  // AO: 爆炸成本 = AN(单价) * AC(覆层面积)
+  const AO = explosionPrice * AC;
+
+  // AQ: 倒转运输成本 = AP(单价) * AG(投料重量)
+  const AQ = pp.transport * AG;
+
+  // AS: 热处理成本 = AR(单价) * AG(投料重量)
+  const AS = pp.heatTreat * AG;
+
+  // AU: 校平成本 = AT(单价) * AB(投料重量/㎡) * AD(基层面积)
+  const AU = pp.straighten * AB * AD;
+
+  // AW: 切割成本 = AV(单价) * (H+I) * 2 * P / 1000
+  const AW = pp.cutting * (H + I) * 2 * P / 1000;
+
+  // AY: UT成本 = AX(单价) * AD(基层面积)
+  const AY = pp.ut * AD;
+
+  // BA: 包装成本 = AZ(单价) * AE(成品面积)
+  const BA = pp.packaging * AE;
+
+  // BC: 铣边成本 = (H+I) * 2 * P * BB(单价) / 1000
+  const BC = (H + I) * 2 * P * pp.edgeMilling / 1000;
+
+  // BE: PT成本 = BD(单价) * I(成品长度) * P / 1000
+  const BE = pp.pt * I * P / 1000;
+
+  // BG: 补焊成本 = BF(单价) * AF(成品重量)
+  const BG = pp.repairWeld * AF;
+
+  // ===== 汇总 =====
+  // BH: 生产成本(不含税)不含固定 = (AI+AM+AO+AQ+AS+AU+AW+AY+BA+BC+BE+BG) / 1.13
+  const BH = (AI + AM + AO + AQ + AS + AU + AW + AY + BA + BC + BE + BG) / 1.13;
+
+  // BI: 总加工成本/㎡(不含税) = BH / AE
+  const BI = AE > 0 ? BH / AE : 0;
+
+  // BJ: 前后道加工成本/㎡(不含税) = BI - AO/AE/1.13 - AQ/AE/1.09
+  const BJ = BI - (AE > 0 ? AO / AE / 1.13 : 0) - (AE > 0 ? AQ / AE / 1.09 : 0);
+
+  // BL: 废钢(不含税) = -(AG - AF) * 0.9 * 2300
+  const scrapWeight = AG - AF;
+  const BL = -scrapWeight * 0.9 * DEFAULTS.scrapSteelPrice;
+
+  // BK: 原材料成本(不含税) = (E*K*M*N*P*X + G*J*L*O*P*W) / 1e9 / 1.13 + BL
+  const BK = (E * K * M * N * P * X_price + G * J * L * O * P * W_price) / 1e9 / 1.13 + BL;
+
+  // BM: 总成本(不含税) = BH + BK
+  const BM = BH + BK;
+
+  // BN: 加工成本/吨 不含固定费用 = BH / (Q*P) = BH / R
+  const BN = R_total > 0 ? BH / R_total : 0;
+
+  // BO: 前后道加工成本/吨 = BJ / AB
+  const BO = AB > 0 ? BJ / AB : 0;
+
+  // BP: 吨成本 不含固定费用 = BK / R + BN
+  const BP = (R_total > 0 ? BK / R_total : 0) + BN;
+
+  // ===== 固定费用 =====
+  const fc = options.fixedCosts || FIXED_COSTS;
+  const BQ = fc.labor || 0;           // 人工
+  const BR = fc.depreciation || 0;    // 折旧
+  const BS = fc.electricity || 0;     // 电费
+
+  // BT: 加工成本含固定费用/吨 = BN + BQ + BR + BS
+  const BT = BN + BQ + BR + BS;
+
+  // ===== 报价与毛利 =====
+  // S: 单价(含税)元/吨 — 手动输入
+  // T: 总金额(含税)元 — 手动输入
+  const S_price = options.sellingPricePerTon || 0;
+  const T_total = options.totalAmount || 0;
+
+  let sellingPricePerTon = S_price;
+  let totalAmount = T_total;
+
+  // 如果只填了总金额，反算单价
+  if (!S_price && T_total && R_total > 0) {
+    sellingPricePerTon = T_total / R_total;
+  }
+  // 如果只填了单价，算总金额
+  if (S_price && !T_total) {
+    totalAmount = Math.round(S_price * R_total * 100) / 100;
+  }
+
+  // BU: 毛利(不含税)不含固定费用 = S/1.13 - BP
+  const BU = sellingPricePerTon > 0 ? sellingPricePerTon / 1.13 - BP : 0;
+
+  // BV: 毛利(不含税)含固定费用 = BU - BQ - BR - BS
+  const BV = BU - BQ - BR - BS;
+
+  // U: 毛利金额(元) = V(=BV) * R
+  const U_profit = BV * R_total;
+
+  // T: 总金额(含税) = ROUND(S * R, 2)
+  const T_calculated = sellingPricePerTon > 0 ? Math.round(sellingPricePerTon * R_total * 100) / 100 : (totalAmount || 0);
+
+  const hasPrice = sellingPricePerTon > 0 || totalAmount > 0;
+
+  // ===== 组装工序明细数组（用于展示） =====
+  const processes = [
+    { key: 'welding',       name: '拼焊',     unit: '元',   price: pp.welding,       qty: hasWelding ? (M * 1.2 / 1000 * P) : 0,          cost: AI,   qtyDesc: hasWelding ? `复层采购长${M}mm×1.2×${P}张` : '无需拼焊' },
+    { key: 'grindingClad',  name: '打磨-复板', unit: '元/㎡', price: pp.grindingClad,  qty: AC,    cost: pp.grindingClad * AC,   qtyDesc: `覆层面积${AC.toFixed(2)}㎡` },
+    { key: 'grindingBase',  name: '打磨-基板', unit: '元/㎡', price: pp.grindingBase,  qty: AD,    cost: pp.grindingBase * AD,   qtyDesc: `基层面积${AD.toFixed(2)}㎡` },
+    { key: 'grindingFinish',name: '打磨-成品', unit: '元/㎡', price: pp.grindingFinish,qty: AE,    cost: pp.grindingFinish * AE, qtyDesc: `成品面积${AE.toFixed(2)}㎡` },
+    { key: 'explosion',     name: '爆炸',     unit: '元/㎡', price: explosionPrice,   qty: AC,    cost: AO,                      qtyDesc: `覆层面积${AC.toFixed(2)}㎡` },
+    { key: 'transport',     name: '倒转运输',  unit: '元/吨', price: pp.transport,     qty: AG,    cost: AQ,                      qtyDesc: `投料${AG.toFixed(3)}吨` },
+    { key: 'heatTreat',     name: '热处理',   unit: '元/吨', price: pp.heatTreat,     qty: AG,    cost: AS,                      qtyDesc: `投料${AG.toFixed(3)}吨` },
+    { key: 'straighten',    name: '校平',     unit: '元/㎡', price: pp.straighten,    qty: AB*AD, cost: AU,                      qtyDesc: `投料/㎡${AB.toFixed(4)}×基层面积${AD.toFixed(2)}` },
+    { key: 'cutting',       name: '切割',     unit: '元/m',  price: pp.cutting,       qty: (H+I)*2*P/1000, cost: AW,            qtyDesc: `周长${((H+I)*2*P/1000).toFixed(1)}m` },
+    { key: 'ut',            name: 'UT',      unit: '元/㎡', price: pp.ut,            qty: AD,    cost: AY,                      qtyDesc: `基层面积${AD.toFixed(2)}㎡` },
+    { key: 'packaging',     name: '包装',     unit: '元/㎡', price: pp.packaging,     qty: AE,    cost: BA,                      qtyDesc: `成品面积${AE.toFixed(2)}㎡` },
+    { key: 'edgeMilling',   name: '铣边',     unit: '元/m',  price: pp.edgeMilling,   qty: (H+I)*2*P/1000, cost: BC,            qtyDesc: `周长${((H+I)*2*P/1000).toFixed(1)}m` },
+    { key: 'pt',            name: 'PT',      unit: '元/m',  price: pp.pt,            qty: I*P/1000,       cost: BE,            qtyDesc: `成品长${(I*P/1000).toFixed(1)}m` },
+    { key: 'repairWeld',    name: '补焊',     unit: '元/吨', price: pp.repairWeld,    qty: AF,    cost: BG,                      qtyDesc: `成品重量${AF.toFixed(3)}吨` },
+  ];
+
+  return {
+    // 工序明细
+    processes,
+    processCostBeforeTax: BH,        // BH: 生产成本(不含税)不含固定
+
+    // 基础数据
+    baseData: {
+      AA, AB, AC, AD, AE, AF, AG,
+      claddingDensity: N,
+      baseDensity: O,
+    },
+
+    // 采购尺寸（从第一页填入）
+    purchaseDims: { J, K, L, M, E, G },
+
+    // 成品参数
+    finished: {
+      D, F, H, I, P,
+      Q_unit,        // 成品单重(吨)
+      R_total,       // 成品总重(吨)
+      isCircular,
+    },
+
+    // 成本汇总
+    cost: {
+      BH,             // 生产成本(不含税)不含固定
+      BI,             // 总加工成本/㎡(不含税)
+      BJ,             // 前后道加工成本/㎡(不含税)
+      BK,             // 原材料成本(不含税)
+      BL,             // 废钢(不含税，负值)
+      BM,             // 总成本(不含税)
+      BN,             // 加工成本/吨 不含固定
+      BO,             // 前后道加工成本/吨
+      BP,             // 吨成本 不含固定费用
+      BT,             // 加工成本含固定费用/吨
+    },
+
+    // 固定费用
+    fixedCosts: { BQ, BR, BS },
+
+    // 报价与毛利
+    pricing: {
+      S: sellingPricePerTon,        // 单价(含税)元/吨
+      T: T_calculated,              // 总金额(含税)元
+      BU,                           // 毛利(不含税)不含固定费用
+      BV,                           // 毛利(不含税)含固定费用
+      U: U_profit,                  // 毛利金额(元)
+      hasPrice,                     // 是否已填入价格
+    },
+
+    // 爆炸单价
+    explosionPrice,
+
+    // 废钢
+    scrapWeight,
+  };
+}
+
 // ========== 批量计算 ==========
 
 /**
@@ -1251,6 +1507,7 @@ if (typeof window !== 'undefined') {
     designRawMaterial,
     designLayoutPlan,
     generateWeldingDrawing,
+    calculateProcessCost,
     getCladdingMaterial,
     getBaseMaterial,
     getCladdingDensity,
@@ -1265,6 +1522,7 @@ if (typeof window !== 'undefined') {
     STANDARD_STAINLESS_WIDTHS,
     MAX_PURCHASE_LENGTH,
     PROCESSING_FEES,
+    FIXED_COSTS,
     DEFAULTS,
   };
 }
