@@ -5,30 +5,42 @@
 
 // ========== 材料数据库 ==========
 
-// 复层材料密度 (g/cm³)
+// 复层材料密度 (g/cm³) - 支持自动查询
 const CLADDING_DENSITY = {
   // 不锈钢 (标准牌号)
   'S31603': 8.0, 'S31608': 8.0, 'S30403': 8.0, 'S30408': 8.0,
   'S31008': 8.0, 'S39042': 8.0, 'S31703': 8.0,
+  'S32101': 7.8, 'S32205': 7.8, 'S32750': 7.8,
   // 不锈钢 (常用别名)
   '304': 8.0, '304L': 8.0, '316': 8.0, '316L': 8.0,
   '321': 8.0, '310S': 8.0, '309S': 8.0, '316TI': 8.0,
-  // 双相不锈钢
-  'S32205': 7.8, 'S32750': 7.8, 'S32101': 7.8,
   '2205': 7.8, '2507': 7.8, '2304': 7.8,
   // 钛及钛合金
   'TA1': 4.51, 'TA2': 4.51, 'TA9': 4.51, 'TA10': 4.51,
+  'TA3': 4.51, 'TA4': 4.51, 'TC4': 4.43,
   // 镍基合金
   'N06625': 8.44, 'N08825': 8.14, 'N06600': 8.47,
+  'N10276': 8.89, 'N06601': 8.11, 'N04400': 8.83,
   // 铜合金
   'TU1': 8.9, 'T2': 8.9, 'H62': 8.43, 'B10': 8.9, 'B30': 8.9,
+  'T3': 8.89, 'H68': 8.5, 'HSn70-1': 8.54, 'QAl9-2': 7.6,
+  // 锆及锆合金
+  'R60702': 6.51, 'R60705': 6.51, 'Zr': 6.51,
+  // 钽
+  'Ta': 16.6, 'Ta1': 16.6, 'Ta2': 16.6,
+  // 铝
+  'L1': 2.71, 'L2': 2.71, '1060': 2.70, '5052': 2.68, '6061': 2.70,
 };
 
 // 基层材料密度
 const BASE_DENSITY = {
   'Q235B': 7.85, 'Q235C': 7.85, 'Q345R': 7.85, 'Q245R': 7.85,
   'Q345B': 7.85, 'Q355B': 7.85, 'Q370R': 7.85,
-  '20R': 7.85, '16MnR': 7.85,
+  'Q345q': 7.85, 'Q370q': 7.85, 'Q420q': 7.85,
+  '20R': 7.85, '16MnR': 7.85, '16Mn': 7.85, '20g': 7.85,
+  'Q345': 7.85, 'Q355': 7.85, 'Q235': 7.85,
+  'A516Gr70': 7.85, 'SA516Gr70': 7.85, 'A36': 7.85,
+  '09MnNiDR': 7.85, '15CrMoR': 7.85, '12Cr1MoVR': 7.85,
 };
 
 // 材料类型分类 (用于爆炸单价查表)
@@ -72,14 +84,14 @@ const PROCESSING_FEES = {
   grindingBase:  { name: '打磨-基板', price: 16, unit: '㎡' },  // 打磨基层
   grindingFinish:{ name: '打磨-成品', price: 24, unit: '㎡' },  // 打磨成品
   transport:   { name: '运输', price: 170,   unit: '吨' },     // 倒转运输
-  heatTreat:   { name: '热处理', price: 20,  unit: '吨' },     // 热处理
+  heatTreat:   { name: '热处理', price: 0,   unit: '吨' },     // 热处理 (Excel毛利表默认0)
   straighten:  { name: '校平', price: 7,     unit: '吨' },     // 校平(实际按吨计)
-  ut:          { name: 'UT',   price: 1.5,   unit: '㎡' },     // 超声波检测
+  ut:          { name: 'UT',   price: 2,     unit: '㎡' },     // 超声波检测 (Excel毛利表=2)
   packaging:   { name: '包装', price: 5,     unit: '㎡' },     // 包装
   cutting:     { name: '切割', price: 2.5,   unit: 'm'  },     // 切割
-  edgeMilling: { name: '铣边', price: 2.2,   unit: 'm'  },     // 铣边
+  edgeMilling: { name: '铣边', price: 0,     unit: 'm'  },     // 铣边 (Excel毛利表默认0, 按需启用)
   pt:          { name: 'PT',   price: 12,    unit: 'm'  },     // 渗透检测
-  repairWeld:  { name: '补焊', price: 30,    unit: '吨' },     // 补焊(实际按吨计)
+  repairWeld:  { name: '补焊', price: 45,    unit: '吨' },     // 补焊(Excel毛利表=45)
 };
 
 // 固定费用 (元/吨)
@@ -107,6 +119,176 @@ function getDefaultMargins(grade) {
     baseWidening: m.baseWidening,
     baseLengthening: m.baseLengthening,
     claddingExtraMargin: m.claddingWidening, // 旧字段, 现在等于独立覆层余量
+  };
+}
+
+// ========== 密度查询 ==========
+
+/**
+ * 查询材料密度（从本地数据库）
+ * @param {string} material - 材料牌号
+ * @param {string} type - 'cladding' | 'base'
+ * @returns {number|null} 密度值 g/cm³, null=未找到
+ */
+function lookupDensity(material, type) {
+  if (!material) return null;
+  const mat = material.trim().toUpperCase();
+  const db = type === 'cladding' ? CLADDING_DENSITY : BASE_DENSITY;
+  if (db[mat] !== undefined) return db[mat];
+  // 尝试去掉前后缀再查
+  // 不锈钢统一以S开头查
+  if (type === 'cladding' && mat.startsWith('S') && db[mat] === undefined) {
+    // 尝试数字部分
+    const num = mat.replace(/^S/i, '');
+    if (db[num] !== undefined) return db[num];
+  }
+  return null;
+}
+
+/**
+ * 生成在线搜索密度的URL
+ * @param {string} material - 材料牌号
+ * @returns {string} 搜索URL
+ */
+function getDensitySearchUrl(material) {
+  return `https://www.baidu.com/s?wd=${encodeURIComponent(material + ' 材料密度 g/cm3')}`;
+}
+
+// ========== 材料价格参考 ==========
+
+/**
+ * 钢材价格参考数据（仅供参考，实际以市场价为准）
+ * 数据来源：我的钢铁网、钢宝网等公开报价
+ */
+const STEEL_PRICE_REFERENCE = {
+  // 碳钢/基层材料
+  carbon: {
+    'Q235B': { min: 3300, max: 3700, unit: '元/吨', desc: 'Q235碳钢中厚板' },
+    'Q345R': { min: 3500, max: 3900, unit: '元/吨', desc: 'Q345R容器板' },
+    'Q245R': { min: 3400, max: 3800, unit: '元/吨', desc: 'Q245R容器板' },
+    'Q345B': { min: 3400, max: 3800, unit: '元/吨', desc: 'Q345低合金板' },
+    'Q355B': { min: 3400, max: 3800, unit: '元/吨', desc: 'Q355低合金板' },
+  },
+  // 不锈钢/复层材料
+  stainless: {
+    'S30408': { min: 13000, max: 14000, unit: '元/吨', desc: '304不锈钢热轧卷板' },
+    'S30403': { min: 13200, max: 14200, unit: '元/吨', desc: '304L不锈钢' },
+    'S31608': { min: 22500, max: 24500, unit: '元/吨', desc: '316不锈钢' },
+    'S31603': { min: 22800, max: 24800, unit: '元/吨', desc: '316L不锈钢' },
+    'S31008': { min: 28000, max: 32000, unit: '元/吨', desc: '310S耐热不锈钢' },
+    'S32205': { min: 28000, max: 32000, unit: '元/吨', desc: '2205双相不锈钢' },
+    'S32750': { min: 45000, max: 55000, unit: '元/吨', desc: '2507超级双相不锈钢' },
+  },
+  // 钛材
+  titanium: {
+    'TA1': { min: 80000, max: 120000, unit: '元/吨', desc: 'TA1工业纯钛' },
+    'TA2': { min: 80000, max: 120000, unit: '元/吨', desc: 'TA2工业纯钛' },
+  },
+  // 镍基合金
+  nickel: {
+    'N06625': { min: 180000, max: 250000, unit: '元/吨', desc: 'Inconel 625' },
+    'N08825': { min: 150000, max: 200000, unit: '元/吨', desc: 'Incoloy 825' },
+  },
+};
+
+/**
+ * 获取材料价格参考
+ * @param {string} material - 材料牌号
+ * @param {string} category - 'carbon' | 'stainless' | 'titanium' | 'nickel'
+ * @returns {Object|null} { min, max, unit, desc }
+ */
+function lookupPriceReference(material, category) {
+  if (!material) return null;
+  const mat = material.trim().toUpperCase();
+  const db = STEEL_PRICE_REFERENCE[category];
+  if (!db) return null;
+  if (db[mat]) return db[mat];
+  // 尝试去掉S前缀
+  if (mat.startsWith('S') && mat.length > 1) {
+    const num = mat.replace(/^S/i, '');
+    if (db[num]) return db[num];
+  }
+  return null;
+}
+
+/**
+ * 生成在线搜索钢材价格的URL
+ * @param {string} material - 材料牌号
+ * @returns {string} 搜索URL
+ */
+function getPriceSearchUrl(material) {
+  return `https://www.baidu.com/s?wd=${encodeURIComponent(material + ' 钢材价格 今日报价 元/吨')}`;
+}
+
+// ========== 建议售价计算 ==========
+
+/**
+ * 根据成本计算建议售价
+ * @param {Object} costData - calculateProcessCost返回的cost对象
+ * @param {number} targetMarginRate - 目标利润率 (如0.15=15%)
+ * @returns {Object} { suggestedPricePerTon, suggestedTotalAmount, costPerTon, marginPerTon, details }
+ */
+function calculateSuggestedPrice(costData, targetMarginRate = 0.15) {
+  // BT: 加工成本含固定费用/吨
+  const BT = costData.cost.BT;
+  // BP: 吨成本不含固定费用
+  const BP = costData.cost.BP;
+  // R: 成品总重(吨)
+  const R = costData.finished.R_total;
+
+  if (R <= 0 || BT <= 0) {
+    return { suggestedPricePerTon: 0, suggestedTotalAmount: 0, costPerTon: 0, marginPerTon: 0 };
+  }
+
+  // 建议含税单价 = BT * 1.13 * (1 + 目标利润率)
+  // BU(毛利不含固定) = S/1.13 - BP
+  // BV(毛利含固定) = BU - BQ - BR - BS = BU - (BT - BN) 
+  // 要使BV = BT * 目标利润率:
+  // S/1.13 - BP - (BT - BN) = BT * 目标利润率
+  // S/1.13 = BP + BT - BN + BT * 目标利润率
+  // S/1.13 = BP + BN + BQ+BR+BS - BN + BT * 目标利润率  (因为 BT = BN + BQ+BR+BS)
+  // S/1.13 = BP + BQ+BR+BS + BT * 目标利润率
+  // S/1.13 = BP + (BT - BN) + BT * 目标利润率
+  
+  // 简化：建议含税单价 = (BT + BT * 目标利润率) * 1.13
+  // 这样 BV = S/1.13 - BP - (BT-BN) = BT*(1+rate) - BP - BT + BN = BT*rate - BP + BN
+  // 不太对...让我重新推导
+
+  // 目标：BV(含固定毛利/吨) = BT * targetMarginRate
+  // BV = BU - BQ - BR - BS = S/1.13 - BP - (BT - BN)
+  // BT * rate = S/1.13 - BP - BT + BN
+  // S/1.13 = BT * rate + BP + BT - BN
+  // S/1.13 = BT * (1 + rate) + BP - BN
+  // 注意 BP = BK/R + BN, 所以 BP - BN = BK/R (原材料成本/吨)
+  // S/1.13 = BT * (1 + rate) + BK/R
+  // S = (BT * (1 + rate) + BK/R) * 1.13
+
+  const BK_per_ton = R > 0 ? costData.cost.BK / R : 0;
+  const BN = costData.cost.BN;
+  const priceExclTax = BT * (1 + targetMarginRate) + BK_per_ton;
+  const suggestedPricePerTon = Math.round(priceExclTax * 1.13);
+  const suggestedTotalAmount = Math.round(suggestedPricePerTon * R * 100) / 100;
+
+  // 计算对应的毛利
+  const BU = suggestedPricePerTon / 1.13 - BP;
+  const BV = BU - (BT - BN);
+  const marginPerTon = BV;
+  const marginTotal = BV * R;
+
+  return {
+    suggestedPricePerTon,
+    suggestedTotalAmount,
+    costPerTon: Math.round(BT + BK_per_ton),
+    marginPerTon: Math.round(marginPerTon),
+    marginTotal: Math.round(marginTotal),
+    targetMarginRate,
+    details: {
+      BT: BT.toFixed(0),
+      BK_per_ton: BK_per_ton.toFixed(0),
+      BN: BN.toFixed(0),
+      BP: BP.toFixed(0),
+      priceExclTax: priceExclTax.toFixed(0),
+    },
   };
 }
 
@@ -326,9 +508,9 @@ function designRawMaterial(input) {
   const E = D;                          // 采购复层厚度 = 成品复层厚度
   const G = F + asmeExtra;              // 采购基层厚度 (ASME时+1mm)
 
-  // 密度
-  const R = getCladdingDensity(grade);
-  const baseDensity = getBaseDensity(grade);
+  // 密度 (支持手动覆盖)
+  const R = input.claddingDensityOverride ?? getCladdingDensity(grade);
+  const baseDensity = input.baseDensityOverride ?? getBaseDensity(grade);
   const category = MATERIAL_CATEGORY[getCladdingMaterial(grade)] || 'austenitic';
 
   // 圆形板面积计算 (mm²)
@@ -1511,10 +1693,16 @@ if (typeof window !== 'undefined') {
     getCladdingMaterial,
     getBaseMaterial,
     getCladdingDensity,
+    getBaseDensity,
     getExplosionPrice,
     getDefaultMargins,
     getMarginsByStandard,
     checkPurchaseSize,
+    lookupDensity,
+    getDensitySearchUrl,
+    lookupPriceReference,
+    getPriceSearchUrl,
+    calculateSuggestedPrice,
     CLADDING_DENSITY,
     BASE_DENSITY,
     EXPLOSION_PRICE_TABLE,
@@ -1524,5 +1712,6 @@ if (typeof window !== 'undefined') {
     PROCESSING_FEES,
     FIXED_COSTS,
     DEFAULTS,
+    STEEL_PRICE_REFERENCE,
   };
 }

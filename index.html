@@ -177,21 +177,29 @@
     <div class="card mb-24">
       <div class="card-header">
         <h2>原材料价格</h2>
-        <span class="text-sm text-secondary">请手动填入实际采购价格（含税）</span>
+        <span class="text-sm text-secondary">支持自动获取参考价和手动输入（含税）</span>
       </div>
       <div class="card-body">
         <div class="price-config">
           <div class="form-group">
             <label>碳钢单价 (含税 元/吨)</label>
-            <input type="number" id="carbonSteelPrice" value="" step="10" placeholder="手动填入">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input type="number" id="carbonSteelPrice" value="" step="10" placeholder="手动填入">
+              <button class="btn btn-sm" id="fetchCarbonPriceBtn" title="获取最新报价">获取报价</button>
+            </div>
+            <div id="carbonPriceHint" class="price-hint"></div>
           </div>
           <div class="form-group">
             <label>不锈钢单价 (含税 元/吨)</label>
-            <input type="number" id="stainlessSteelPrice" value="" step="100" placeholder="手动填入">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input type="number" id="stainlessSteelPrice" value="" step="100" placeholder="手动填入">
+              <button class="btn btn-sm" id="fetchStainlessPriceBtn" title="获取最新报价">获取报价</button>
+            </div>
+            <div id="stainlessPriceHint" class="price-hint"></div>
           </div>
         </div>
         <div class="alert alert-info">
-          原材料价格需手动填入实际采购价。毛利计算还需要在下方每条订单中填入报价（单价或总金额）。
+          点击"获取报价"可查看市场参考价并打开网页搜索最新报价。参考价来源于我的钢铁网等公开数据，仅供参考，实际以采购价为准。密度可在下方每条订单中查看和修改。
         </div>
       </div>
     </div>
@@ -252,11 +260,20 @@
     <div class="card mb-24" id="processCostCard" style="display:none;">
       <div class="card-header">
         <h2>工序成本明细</h2>
-        <span class="text-sm text-secondary">原材料规格自动从第一页填入，报价需手动填入</span>
+        <span class="text-sm text-secondary">原材料规格自动填入，密度可编辑，报价可系统建议或手动填入</span>
       </div>
       <div class="card-body">
         <div class="alert alert-info">
-          原材料规格（基层/复层采购宽长）已自动从第一页填入。每条订单需手动填入报价（含税单价元/吨 或 含税总额元），填入后自动计算毛利。
+          原材料规格（基层/复层采购宽长）已自动从第一页填入。密度根据牌号自动查询，可手动修改（点击🔍在线查询）。系统可根据成本给出建议售价，也可手动填入报价。
+        </div>
+        <!-- 建议售价控制 -->
+        <div class="suggest-controls">
+          <div class="form-group" style="margin:0;">
+            <label class="text-sm">目标利润率 (%)</label>
+            <input type="number" id="targetMarginRate" value="15" step="1" min="0" max="100" style="width:80px;">
+          </div>
+          <button class="btn btn-sm btn-primary" id="suggestAllPriceBtn">一键填入建议报价</button>
+          <div id="suggestHint" class="text-sm text-secondary" style="margin-left:8px;"></div>
         </div>
         <div id="processCostDetail"></div>
       </div>

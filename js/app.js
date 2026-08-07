@@ -61,6 +61,8 @@ const App = {
     sampling: false,    // 取样
     asmeSA264: false,   // ASME SA264标准
   },
+  densityOverrides: {},  // 密度手动覆盖 { idx: { cladding: x, base: y } }
+  targetMarginRate: 0.15, // 建议售价目标利润率
 
   init() {
     this.bindEvents();
@@ -199,6 +201,33 @@ const App = {
         const val = explosionEl.value.trim();
         this.priceConfig.explosionPrice = val ? parseFloat(val) : null;
       });
+    }
+
+    // 获取碳钢最新报价
+    const fetchCarbonBtn = document.getElementById('fetchCarbonPriceBtn');
+    if (fetchCarbonBtn) {
+      fetchCarbonBtn.addEventListener('click', () => this.fetchSteelPrice('carbon'));
+    }
+
+    // 获取不锈钢最新报价
+    const fetchStainlessBtn = document.getElementById('fetchStainlessPriceBtn');
+    if (fetchStainlessBtn) {
+      fetchStainlessBtn.addEventListener('click', () => this.fetchSteelPrice('stainless'));
+    }
+
+    // 目标利润率
+    const marginEl = document.getElementById('targetMarginRate');
+    if (marginEl) {
+      marginEl.addEventListener('input', () => {
+        this.targetMarginRate = (parseFloat(marginEl.value) || 15) / 100;
+        this.renderProcessCost();
+      });
+    }
+
+    // 批量建议报价
+    const suggestAllBtn = document.getElementById('suggestAllPriceBtn');
+    if (suggestAllBtn) {
+      suggestAllBtn.addEventListener('click', () => this.applyAllSuggestedPrices());
     }
 
     // 重点订单勾选
@@ -866,11 +895,17 @@ const App = {
 
     // 为每条订单计算工序成本
     this.processResults = this.parsedItems.map((item, idx) => {
+      const claddingDensity = this.getDensity(idx, 'cladding');
+      const baseDensity = this.getDensity(idx, 'base');
       const rawMaterial = CostCalculator.designRawMaterial({
         ...item, options: this.designOptions,
+        claddingDensityOverride: claddingDensity,
+        baseDensityOverride: baseDensity,
       });
       const layoutPlan = CostCalculator.designLayoutPlan({
         ...item, options: this.designOptions,
+        claddingDensityOverride: claddingDensity,
+        baseDensityOverride: baseDensity,
       });
       const orderPrice = this.orderPrices[idx] || {};
       const cost = CostCalculator.calculateProcessCost(
@@ -896,6 +931,12 @@ const App = {
       const fin = c.finished;
       const pricing = c.pricing;
 
+      // 密度值
+      const cladDensity = this.getDensity(idx, 'cladding');
+      const baseDensityVal = this.getDensity(idx, 'base');
+      const cladMat = CostCalculator.getCladdingMaterial(item.grade);
+      const baseMat = CostCalculator.getBaseMaterial(item.grade);
+
       // 工序明细行
       let processRows = c.processes.map(p => `
         <tr>
@@ -907,6 +948,19 @@ const App = {
           <td class="text-secondary text-sm">${p.qtyDesc}</td>
         </tr>
       `).join('');
+
+      // 建议售价
+      const suggestion = this.getSuggestedPrice(idx);
+      const suggestHtml = suggestion && suggestion.suggestedPricePerTon > 0 ? `
+        <div class="pc-suggest">
+          <span class="badge badge-blue">建议报价</span>
+          <span class="text-sm">含税单价: <strong>${suggestion.suggestedPricePerTon} 元/吨</strong></span>
+          <span class="text-sm text-secondary">| 总额: ${suggestion.suggestedTotalAmount} 元</span>
+          <span class="text-sm text-secondary">| 吨成本: ${suggestion.costPerTon} 元/吨</span>
+          <span class="text-sm" style="color:var(--success)">| 预估毛利: ${suggestion.marginPerTon} 元/吨</span>
+          <button class="btn btn-sm btn-primary" onclick="App.applySuggestedPrice(${idx})" style="margin-left:8px;">填入建议价</button>
+        </div>
+      ` : '';
 
       // 报价输入
       const orderPrice = this.orderPrices[idx] || {};
@@ -932,7 +986,7 @@ const App = {
       `;
 
       const profitColor = pricing.BV >= 0 ? 'var(--success)' : 'var(--danger)';
-      const noPriceHtml = pricing.hasPrice ? '' : '<div class="alert alert-warning" style="margin:8px 0;padding:6px 12px;font-size:12px;">⚠ 尚未填入报价，毛利无法计算</div>';
+      const noPriceHtml = pricing.hasPrice ? '' : '<div class="alert alert-warning" style="margin:8px 0;padding:6px 12px;font-size:12px;">⚠ 尚未填入报价，毛利无法计算。可点击"填入建议价"自动填入系统推荐价格。</div>';
 
       return `
         <div class="pc-item">
@@ -943,13 +997,24 @@ const App = {
             <span class="badge badge-blue">爆炸${c.explosionPrice}元/㎡</span>
           </div>
 
-          <!-- 原材料规格（第一页自动填入） -->
+          <!-- 原材料规格（第一页自动填入）+ 密度编辑 -->
           <div class="pc-specs">
             <span class="text-sm text-secondary">原材料规格(自动填入):</span>
             <span class="badge badge-green">基层 ${pd.J}×${pd.L}mm</span>
             <span class="badge badge-green">复层 ${pd.K}×${pd.M}mm</span>
             <span class="badge badge-green">采购厚 ${pd.E}+${pd.G}mm</span>
-            <span class="text-sm text-secondary">| 密度: 复${bd.claddingDensity} 基${bd.baseDensity}</span>
+            <span class="text-sm text-secondary">|</span>
+            <span class="text-sm">复层密度:</span>
+            <input type="number" class="inline-input density-input" value="${cladDensity}" step="0.01" min="0"
+              style="width:60px;" title="复层材料 ${cladMat} 密度"
+              onchange="App.updateDensity(${idx}, 'cladding', this.value)">
+            <button class="btn btn-sm" onclick="App.searchDensityOnline('${cladMat}')" title="在线查询${cladMat}密度" style="padding:2px 6px;font-size:11px;">🔍</button>
+            <span class="text-sm">基层密度:</span>
+            <input type="number" class="inline-input density-input" value="${baseDensityVal}" step="0.01" min="0"
+              style="width:60px;" title="基层材料 ${baseMat} 密度"
+              onchange="App.updateDensity(${idx}, 'base', this.value)">
+            <button class="btn btn-sm" onclick="App.searchDensityOnline('${baseMat}')" title="在线查询${baseMat}密度" style="padding:2px 6px;font-size:11px;">🔍</button>
+            <span class="text-sm text-secondary">g/cm³</span>
           </div>
 
           <!-- 基础数据 -->
@@ -1011,6 +1076,9 @@ const App = {
             </table>
           </div>
 
+          <!-- 建议售价 -->
+          ${suggestHtml}
+
           <!-- 报价与毛利 -->
           ${priceInputHtml}
           ${noPriceHtml}
@@ -1060,6 +1128,141 @@ const App = {
       delete this.orderPrices[idx][field];
     }
     this.renderProcessCost();
+  },
+
+  // ========== 密度管理 ==========
+
+  getDensity(idx, type) {
+    // 优先使用手动覆盖值
+    if (this.densityOverrides[idx] && this.densityOverrides[idx][type] != null) {
+      return this.densityOverrides[idx][type];
+    }
+    // 从牌号自动查询
+    const item = this.parsedItems[idx];
+    if (!item) return type === 'cladding' ? 8.0 : 7.85;
+    const mat = type === 'cladding'
+      ? CostCalculator.getCladdingMaterial(item.grade)
+      : CostCalculator.getBaseMaterial(item.grade);
+    const density = CostCalculator.lookupDensity(mat, type);
+    return density != null ? density : (type === 'cladding' ? 8.0 : 7.85);
+  },
+
+  updateDensity(idx, type, value) {
+    const v = parseFloat(value);
+    if (!this.densityOverrides[idx]) this.densityOverrides[idx] = {};
+    if (!isNaN(v) && v > 0) {
+      this.densityOverrides[idx][type] = v;
+    } else {
+      delete this.densityOverrides[idx][type];
+    }
+    // 更新第一页和第二页
+    this.renderRawMaterialDesign();
+    this.renderLayoutPlan();
+    this.renderProcessCost();
+  },
+
+  searchDensityOnline(material) {
+    if (!material) {
+      alert('请先输入材料牌号');
+      return;
+    }
+    const url = CostCalculator.getDensitySearchUrl(material);
+    window.open(url, '_blank');
+  },
+
+  // ========== 材料价格获取 ==========
+
+  fetchSteelPrice(type) {
+    // 获取当前第一条订单的材料牌号作为参考
+    let material = '';
+    let category = type;
+    if (this.parsedItems.length > 0) {
+      const item = this.parsedItems[0];
+      if (type === 'carbon') {
+        material = CostCalculator.getBaseMaterial(item.grade);
+      } else {
+        material = CostCalculator.getCladdingMaterial(item.grade);
+        // 判断材料类别
+        const cat = CostCalculator.MATERIAL_CATEGORY[material] || 'austenitic';
+        if (cat === 'titanium') category = 'titanium';
+        else if (cat === 'nickel') category = 'nickel';
+      }
+    }
+
+    // 显示参考价格
+    const ref = CostCalculator.lookupPriceReference(material, category);
+    const inputId = type === 'carbon' ? 'carbonSteelPrice' : 'stainlessSteelPrice';
+    const input = document.getElementById(inputId);
+    const hintId = type === 'carbon' ? 'carbonPriceHint' : 'stainlessPriceHint';
+    const hintEl = document.getElementById(hintId);
+
+    if (ref) {
+      if (hintEl) {
+        hintEl.innerHTML = `<span class="badge badge-blue">参考价</span> ${ref.desc}: ${ref.min}~${ref.max} ${ref.unit} <span class="text-sm text-secondary">(数据仅供参考)</span>`;
+      }
+      // 如果输入框为空，自动填入中间值
+      if (input && !input.value) {
+        const mid = Math.round((ref.min + ref.max) / 2);
+        input.value = mid;
+        this.priceConfig[type === 'carbon' ? 'carbonSteelPrice' : 'stainlessSteelPrice'] = mid;
+        this.renderProcessCost();
+      }
+    }
+
+    // 打开网页搜索最新报价
+    if (material) {
+      const url = CostCalculator.getPriceSearchUrl(material);
+      window.open(url, '_blank');
+    } else {
+      // 没有材料信息时打开通用搜索
+      const searchTerm = type === 'carbon' ? '碳钢 Q235 价格 今日报价' : '不锈钢 304 价格 今日报价';
+      window.open(`https://www.baidu.com/s?wd=${encodeURIComponent(searchTerm)}`, '_blank');
+    }
+  },
+
+  // ========== 建议售价 ==========
+
+  getSuggestedPrice(idx) {
+    const pr = this.processResults[idx];
+    if (!pr) return null;
+    return CostCalculator.calculateSuggestedPrice(pr.cost, this.targetMarginRate);
+  },
+
+  applySuggestedPrice(idx) {
+    const suggestion = this.getSuggestedPrice(idx);
+    if (!suggestion || suggestion.suggestedPricePerTon <= 0) {
+      alert('无法计算建议售价，请先填入原材料价格');
+      return;
+    }
+    if (!this.orderPrices[idx]) this.orderPrices[idx] = {};
+    this.orderPrices[idx].sellingPricePerTon = suggestion.suggestedPricePerTon;
+    delete this.orderPrices[idx].totalAmount;
+    this.renderProcessCost();
+  },
+
+  applyAllSuggestedPrices() {
+    if (this.processResults.length === 0) {
+      alert('请先添加规格数据');
+      return;
+    }
+    let applied = 0;
+    this.processResults.forEach((pr, idx) => {
+      const suggestion = this.getSuggestedPrice(idx);
+      if (suggestion && suggestion.suggestedPricePerTon > 0) {
+        if (!this.orderPrices[idx]) this.orderPrices[idx] = {};
+        this.orderPrices[idx].sellingPricePerTon = suggestion.suggestedPricePerTon;
+        delete this.orderPrices[idx].totalAmount;
+        applied++;
+      }
+    });
+    this.renderProcessCost();
+    if (applied > 0) {
+      const hintEl = document.getElementById('suggestHint');
+      if (hintEl) {
+        hintEl.textContent = `已为 ${applied} 条订单填入建议报价（目标利润率 ${(this.targetMarginRate * 100).toFixed(0)}%）`;
+        hintEl.className = 'alert alert-success';
+      }
+    }
   },
 };
 

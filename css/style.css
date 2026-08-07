@@ -1133,3 +1133,64 @@ body {
   border: 1px solid #fcd34d;
   color: #92400e;
 }
+
+/* ========== 新增：密度编辑、价格提示、建议售价 ========== */
+
+.density-input {
+  padding: 3px 6px !important;
+  font-size: 12px !important;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 4px;
+  text-align: center;
+}
+
+.density-input:focus {
+  border-color: var(--primary, #2563eb);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+}
+
+.price-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-secondary, #64748b);
+  min-height: 18px;
+}
+
+.suggest-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 10px 16px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+
+.suggest-controls .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.suggest-controls input {
+  padding: 4px 8px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.pc-suggest {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 8px 12px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
