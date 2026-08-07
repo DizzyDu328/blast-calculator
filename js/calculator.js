@@ -909,12 +909,70 @@ function designLayoutPlan(input) {
     });
   }
 
+  // ===== 计算排版后的调整采购尺寸 =====
+  const weldPlan = plans.find(p => p.type === 'welding');
+  const multiPlan = plans.find(p => p.type === 'multiblank' && p.best);
+
+  let adjJ = K;       // 基层采购宽 (默认=基础)
+  let adjL = O;       // 基层采购长 (默认=基础)
+  let adjK = M;       // 复层采购宽 (默认=基础)
+  let adjM = Q;       // 复层采购长 (默认=基础)
+  let materialCount = S;  // 材料数量(板数), 默认=张数
+  let adjusted = false;
+  const reasons = [];
+
+  // 拼焊调整: 复层采购宽 → 标准板宽 × 条带数
+  if (weldPlan && weldPlan.strips && weldPlan.strips.length > 0) {
+    const stdW = weldPlan.strips[0].standardWidth;
+    const stripCount = weldPlan.stripCount;
+    adjK = stdW * stripCount;
+    adjusted = true;
+    reasons.push(`拼焊: 复层采购宽 ${M}mm → ${stripCount}×${stdW}=${adjK}mm`);
+  }
+
+  // 倍尺调整: 基层/复层采购尺寸 → 倍尺板尺寸, 材料数量 → 板数
+  if (multiPlan) {
+    const best = multiPlan.best;
+    const cladPW_orig = M;
+    const basePW_orig = K;
+    const cladPL_orig = Q;
+    const basePL_orig = O;
+    const widthChanged = best.cols > 1;
+    const lengthChanged = best.rows > 1;
+
+    // 基层板尺寸
+    adjJ = best.plateWidth;
+    adjL = best.plateLength;
+
+    // 复层板尺寸: 保持复层对基层的额外余量
+    if (widthChanged) {
+      adjK = best.plateWidth + 2 * (cladPW_orig - basePW_orig);
+    }
+    if (lengthChanged) {
+      adjM = best.plateLength + 2 * (cladPL_orig - basePL_orig);
+    }
+
+    materialCount = best.platesNeeded;
+    adjusted = true;
+    reasons.push(`倍尺: 基层 ${K}×${O}mm → ${best.plateWidth}×${best.plateLength}mm (${best.arrangement}, ${best.perPlate}张/板, ${best.platesNeeded}板)`);
+  }
+
   return {
     input: design.input,
     rawMaterial: design.rawMaterial,
     margins: design.margins,
     plans,
     warnings: design.warnings,
+    adjustedDims: {
+      basePurchaseWidth: adjJ,           // J' 基层采购宽(排版后)
+      basePurchaseLength: adjL,          // L' 基层采购长(排版后)
+      claddingPurchaseWidth: adjK,       // K' 复层采购宽(排版后)
+      claddingPurchaseLength: adjM,      // M' 复层采购长(排版后)
+      materialCount,                     // P' 材料数量(板数)
+      originalSheets: S,                 // P 原始张数
+      adjusted,
+      adjustmentReason: reasons.join('; '),
+    },
   };
 }
 
@@ -1396,11 +1454,15 @@ function calculateProcessCost(item, rawMaterial, layoutPlan, priceConfig, proces
   const { grade, sheets: P, isCircular } = item;
   const rm = rawMaterial;
 
-  // ===== 从第一页获取采购尺寸 (J/K/L/M) =====
-  const J = rm.rawMaterial.basePurchaseWidth;       // 基层采购宽度
-  const L = rm.rawMaterial.basePurchaseLength;       // 基层采购长度
-  const K = rm.rawMaterial.claddingPurchaseWidth;    // 复层采购宽度
-  const M = rm.rawMaterial.claddingPurchaseLength;   // 复层采购长度
+  // ===== 从第一页获取采购尺寸 (排版后调整尺寸) =====
+  // 优先使用 layoutPlan.adjustedDims (拼焊/倍尺后的实际采购尺寸)
+  // 回退到 rawMaterial 基础尺寸
+  const adj = (layoutPlan && layoutPlan.adjustedDims) ? layoutPlan.adjustedDims : null;
+  const J = adj ? adj.basePurchaseWidth : rm.rawMaterial.basePurchaseWidth;       // 基层采购宽度(排版后)
+  const L = adj ? adj.basePurchaseLength : rm.rawMaterial.basePurchaseLength;     // 基层采购长度(排版后)
+  const K = adj ? adj.claddingPurchaseWidth : rm.rawMaterial.claddingPurchaseWidth;    // 复层采购宽度(排版后)
+  const M = adj ? adj.claddingPurchaseLength : rm.rawMaterial.claddingPurchaseLength;  // 复层采购长度(排版后)
+  const Pm = adj ? adj.materialCount : P;  // P' 材料数量(板数), 用于材料相关公式
   const H = rm.input.width;                          // 成品宽度
   const I = rm.input.length;                         // 成品长度
 
@@ -1427,15 +1489,16 @@ function calculateProcessCost(item, rawMaterial, layoutPlan, priceConfig, proces
   const finishedArea_mm2 = isCircular ? Math.PI * (H/2) * (H/2) : H * I;
   const AF = (D * finishedArea_mm2 * N / 1e6 + F * finishedArea_mm2 * O / 1e6) * P / 1000;
 
-  // AG: 投料重量(吨) = (E*N*K*L + J*L*O*G) / 1e6 * P / 1000
+  // AG: 投料重量(吨) = (E*N*K*L + J*L*O*G) / 1e6 * Pm / 1000
   // 注意：Excel公式中复层重量用K*L(复层采购宽×基层采购长)，基层用J*L
-  const AG = (E * N * K * L / 1e6 + J * L * O * G / 1e6) * P / 1000;
+  // 使用排版后采购尺寸 + Pm(板数)
+  const AG = (E * N * K * L / 1e6 + J * L * O * G / 1e6) * Pm / 1000;
 
-  // AC: 覆层面积 = K * M / 1e6 * P (m²)
-  const AC = K * M / 1e6 * P;
+  // AC: 覆层面积 = K * M / 1e6 * Pm (m²) — 用排版后尺寸+板数
+  const AC = K * M / 1e6 * Pm;
 
-  // AD: 基层面积 = J * L / 1e6 * P (m²)
-  const AD = J * L / 1e6 * P;
+  // AD: 基层面积 = J * L / 1e6 * Pm (m²) — 用排版后尺寸+板数
+  const AD = J * L / 1e6 * Pm;
 
   // AB: 投料重量/㎡ = (E*N + G*O) / 1000 (吨/m²)
   const AB = (E * N + G * O) / 1000;
@@ -1458,15 +1521,15 @@ function calculateProcessCost(item, rawMaterial, layoutPlan, priceConfig, proces
   if (layoutPlan && layoutPlan.plans) {
     const weldPlan = layoutPlan.plans.find(p => p.type === 'welding');
     if (weldPlan && weldPlan.totalWeldLength) {
-      weldLength_m = weldPlan.totalWeldLength / 1000 * P;
+      weldLength_m = weldPlan.totalWeldLength / 1000 * Pm;  // 按板数计算
       hasWelding = true;
     }
   }
 
   // ===== 各工序成本 (按Excel公式) =====
-  // AI: 拼焊成本 = AH(单价) * M(复层采购长) * 1.2 / 1000 * P
+  // AI: 拼焊成本 = AH(单价) * M(复层采购长-排版后) * 1.2 / 1000 * Pm(板数)
   const AI = hasWelding
-    ? pp.welding * M * 1.2 / 1000 * P
+    ? pp.welding * M * 1.2 / 1000 * Pm
     : 0;
 
   // AM: 打磨成本 = AJ(覆层单价)*AC + AK(基层单价)*AD + AL(成品单价)*AE
@@ -1516,8 +1579,9 @@ function calculateProcessCost(item, rawMaterial, layoutPlan, priceConfig, proces
   const scrapWeight = AG - AF;
   const BL = -scrapWeight * 0.9 * DEFAULTS.scrapSteelPrice;
 
-  // BK: 原材料成本(不含税) = (E*K*M*N*P*X + G*J*L*O*P*W) / 1e9 / 1.13 + BL
-  const BK = (E * K * M * N * P * X_price + G * J * L * O * P * W_price) / 1e9 / 1.13 + BL;
+  // BK: 原材料成本(不含税) = (E*K*M*N*Pm*X + G*J*L*O*Pm*W) / 1e9 / 1.13 + BL
+  // 使用排版后采购尺寸 + Pm(板数)
+  const BK = (E * K * M * N * Pm * X_price + G * J * L * O * Pm * W_price) / 1e9 / 1.13 + BL;
 
   // BM: 总成本(不含税) = BH + BK
   const BM = BH + BK;
@@ -1574,7 +1638,7 @@ function calculateProcessCost(item, rawMaterial, layoutPlan, priceConfig, proces
 
   // ===== 组装工序明细数组（用于展示） =====
   const processes = [
-    { key: 'welding',       name: '拼焊',     unit: '元',   price: pp.welding,       qty: hasWelding ? (M * 1.2 / 1000 * P) : 0,          cost: AI,   qtyDesc: hasWelding ? `复层采购长${M}mm×1.2×${P}张` : '无需拼焊' },
+    { key: 'welding',       name: '拼焊',     unit: '元',   price: pp.welding,       qty: hasWelding ? (M * 1.2 / 1000 * Pm) : 0,          cost: AI,   qtyDesc: hasWelding ? `复层采购长${M}mm×1.2×${Pm}板` : '无需拼焊' },
     { key: 'grindingClad',  name: '打磨-复板', unit: '元/㎡', price: pp.grindingClad,  qty: AC,    cost: pp.grindingClad * AC,   qtyDesc: `覆层面积${AC.toFixed(2)}㎡` },
     { key: 'grindingBase',  name: '打磨-基板', unit: '元/㎡', price: pp.grindingBase,  qty: AD,    cost: pp.grindingBase * AD,   qtyDesc: `基层面积${AD.toFixed(2)}㎡` },
     { key: 'grindingFinish',name: '打磨-成品', unit: '元/㎡', price: pp.grindingFinish,qty: AE,    cost: pp.grindingFinish * AE, qtyDesc: `成品面积${AE.toFixed(2)}㎡` },
@@ -1602,8 +1666,22 @@ function calculateProcessCost(item, rawMaterial, layoutPlan, priceConfig, proces
       baseDensity: O,
     },
 
-    // 采购尺寸（从第一页填入）
+    // 采购尺寸（排版后实际采购尺寸）
     purchaseDims: { J, K, L, M, E, G },
+    // 基础采购尺寸（排版前，用于对比）
+    basePurchaseDims: {
+      J: rm.rawMaterial.basePurchaseWidth,
+      K: rm.rawMaterial.claddingPurchaseWidth,
+      L: rm.rawMaterial.basePurchaseLength,
+      M: rm.rawMaterial.claddingPurchaseLength,
+    },
+    // 排版调整信息
+    layoutAdjustment: adj ? {
+      adjusted: adj.adjusted,
+      reason: adj.adjustmentReason,
+      materialCount: Pm,
+      originalSheets: P,
+    } : null,
 
     // 成品参数
     finished: {

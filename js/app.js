@@ -386,6 +386,12 @@ const App = {
         ...item,
         options: this.designOptions,
       });
+      const layout = CostCalculator.designLayoutPlan({
+        ...item,
+        options: this.designOptions,
+      });
+      const adj = layout.adjustedDims;
+      const hasAdj = adj && adj.adjusted;
       const shapeIcon = design.input.isCircular ? ' <span class="badge badge-blue">圆</span>' : '';
       const finishedDim = design.input.isCircular
         ? `Ф${design.input.diameter || design.input.width}mm`
@@ -396,6 +402,33 @@ const App = {
         : '';
       const asmeBadge = design.margins.asmeExtra > 0
         ? ' <span class="badge badge-amber">ASME</span>' : '';
+
+      // 采购尺寸展示: 排版后有调整时显示对比
+      const baseW = design.rawMaterial.basePurchaseWidth;
+      const baseL = design.rawMaterial.basePurchaseLength;
+      const cladW = design.rawMaterial.claddingPurchaseWidth;
+      const cladL = design.rawMaterial.claddingPurchaseLength;
+      const adjBaseW = hasAdj ? adj.basePurchaseWidth : baseW;
+      const adjBaseL = hasAdj ? adj.basePurchaseLength : baseL;
+      const adjCladW = hasAdj ? adj.claddingPurchaseWidth : cladW;
+      const adjCladL = hasAdj ? adj.claddingPurchaseLength : cladL;
+      const baseChanged = hasAdj && (adjBaseW !== baseW || adjBaseL !== baseL);
+      const cladChanged = hasAdj && (adjCladW !== cladW || adjCladL !== cladL);
+      const countChanged = hasAdj && adj.materialCount !== design.input.sheets;
+
+      const adjBadge = hasAdj ? ' <span class="badge badge-amber">排版调整</span>' : '';
+      const adjNoteHtml = hasAdj ? `
+        <div class="alert alert-warning" style="margin-top:6px;padding:6px 10px;font-size:12px;">
+          <strong>排版后调整:</strong> ${adj.adjustmentReason}
+          ${countChanged ? `<br>材料数量: ${design.input.sheets}张 → ${adj.materialCount}板` : ''}
+        </div>` : '';
+
+      const baseDimHtml = baseChanged
+        ? `<span style="text-decoration:line-through;color:var(--text-tertiary);font-size:11px;">${baseW} × ${baseL}mm</span><br><strong>${adjBaseW} × ${adjBaseL} mm</strong>`
+        : `<strong>${baseW} × ${baseL} mm</strong>`;
+      const cladDimHtml = cladChanged
+        ? `<span style="text-decoration:line-through;color:var(--text-tertiary);font-size:11px;">${cladW} × ${cladL}mm</span><br><strong>${adjCladW} × ${adjCladL} mm</strong>`
+        : `<strong>${cladW} × ${cladL} mm</strong>`;
 
       return `
         <div class="rm-item">
@@ -436,19 +469,21 @@ const App = {
 
             <div class="rm-arrow">→</div>
 
-            <!-- 原材料采购尺寸 -->
+            <!-- 原材料采购尺寸 (排版后) -->
             <div class="rm-block rm-raw">
-              <div class="rm-block-title">原材料(采购)尺寸</div>
+              <div class="rm-block-title">原材料(采购)尺寸${adjBadge}</div>
               <table class="rm-table">
-                <tr><td>基层宽×长</td><td><strong>${design.rawMaterial.basePurchaseWidth} × ${design.rawMaterial.basePurchaseLength} mm</strong></td></tr>
+                <tr><td>基层宽×长</td><td>${baseDimHtml}</td></tr>
                 <tr><td>基层厚度</td><td>${design.rawMaterial.basePurchaseThickness} mm</td></tr>
-                <tr><td>复层宽×长</td><td><strong>${design.rawMaterial.claddingPurchaseWidth} × ${design.rawMaterial.claddingPurchaseLength} mm</strong></td></tr>
+                <tr><td>复层宽×长</td><td>${cladDimHtml}</td></tr>
                 <tr><td>复层厚度</td><td>${design.rawMaterial.claddingPurchaseThickness} mm</td></tr>
+                ${countChanged ? `<tr><td>材料数量</td><td><strong>${adj.materialCount} 板</strong> <span style="color:var(--text-tertiary);font-size:11px;">(原${design.input.sheets}张)</span></td></tr>` : ''}
               </table>
             </div>
           </div>
 
           ${warningHtml}
+          ${adjNoteHtml}
 
           <!-- 面积与重量 -->
           <div class="rm-flow" style="margin-top: 4px;">
@@ -754,11 +789,12 @@ const App = {
         </table>
       </div>
       <div class="detail-section">
-        <div class="detail-title">原材料规格（第一页自动填入）</div>
+        <div class="detail-title">原材料规格（排版后实际采购尺寸）</div>
         <table class="data-table">
-          <tr><td>基层采购 宽×长</td><td>${c.purchaseDims.J} × ${c.purchaseDims.L} mm</td></tr>
-          <tr><td>复层采购 宽×长</td><td>${c.purchaseDims.K} × ${c.purchaseDims.M} mm</td></tr>
+          <tr><td>基层采购 宽×长</td><td>${c.purchaseDims.J} × ${c.purchaseDims.L} mm${(c.basePurchaseDims && c.basePurchaseDims.J !== c.purchaseDims.J) ? `<br><span style="text-decoration:line-through;color:var(--text-tertiary);font-size:11px;">原: ${c.basePurchaseDims.J} × ${c.basePurchaseDims.L}mm</span>` : ''}</td></tr>
+          <tr><td>复层采购 宽×长</td><td>${c.purchaseDims.K} × ${c.purchaseDims.M} mm${(c.basePurchaseDims && c.basePurchaseDims.K !== c.purchaseDims.K) ? `<br><span style="text-decoration:line-through;color:var(--text-tertiary);font-size:11px;">原: ${c.basePurchaseDims.K} × ${c.basePurchaseDims.M}mm</span>` : ''}</td></tr>
           <tr><td>采购复层厚 / 采购基层厚</td><td>${c.purchaseDims.E} / ${c.purchaseDims.G} mm</td></tr>
+          ${(c.layoutAdjustment && c.layoutAdjustment.adjusted) ? `<tr><td>排版调整</td><td style="font-size:11px;color:var(--text-secondary);">${c.layoutAdjustment.reason}${c.layoutAdjustment.materialCount !== c.layoutAdjustment.originalSheets ? `<br>材料数量: ${c.layoutAdjustment.materialCount}板 (原${c.layoutAdjustment.originalSheets}张)` : ''}</td></tr>` : ''}
         </table>
       </div>
       <div class="detail-section">
@@ -988,18 +1024,29 @@ const App = {
       const profitColor = pricing.BV >= 0 ? 'var(--success)' : 'var(--danger)';
       const noPriceHtml = pricing.hasPrice ? '' : '<div class="alert alert-warning" style="margin:8px 0;padding:6px 12px;font-size:12px;">⚠ 尚未填入报价，毛利无法计算。可点击"填入建议价"自动填入系统推荐价格。</div>';
 
+      // 排版调整信息
+      const la = c.layoutAdjustment;
+      const laHtml = (la && la.adjusted) ? `
+        <div class="alert alert-warning" style="margin:4px 0;padding:4px 10px;font-size:11px;">
+          <strong>排版后采购尺寸:</strong> ${la.reason}
+        </div>` : '';
+      const laBadge = (la && la.adjusted) ? ' <span class="badge badge-amber">排版后</span>' : '';
+      const countInfo = (la && la.materialCount !== la.originalSheets) ? ` | ${la.materialCount}板` : '';
+
       return `
         <div class="pc-item">
           <div class="pc-header">
             <span class="pc-index">${idx + 1}</span>
             <span class="pc-grade"><strong>${item.grade}</strong>${shapeIcon}</span>
-            <span class="text-sm text-secondary">${dimText} | ${item.claddingThickness}+${item.baseThickness}mm | ${item.sheets}张</span>
+            <span class="text-sm text-secondary">${dimText} | ${item.claddingThickness}+${item.baseThickness}mm | ${item.sheets}张${countInfo}</span>
             <span class="badge badge-blue">爆炸${c.explosionPrice}元/㎡</span>
           </div>
 
-          <!-- 原材料规格（第一页自动填入）+ 密度编辑 -->
+          ${laHtml}
+
+          <!-- 原材料规格（排版后实际采购尺寸）+ 密度编辑 -->
           <div class="pc-specs">
-            <span class="text-sm text-secondary">原材料规格(自动填入):</span>
+            <span class="text-sm text-secondary">原材料规格${laBadge}:</span>
             <span class="badge badge-green">基层 ${pd.J}×${pd.L}mm</span>
             <span class="badge badge-green">复层 ${pd.K}×${pd.M}mm</span>
             <span class="badge badge-green">采购厚 ${pd.E}+${pd.G}mm</span>
